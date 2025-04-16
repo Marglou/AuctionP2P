@@ -1,48 +1,65 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <sodium.h>
+#include <string.h>
 #include <arpa/inet.h> // Pour htonl et htons
 
-// Définition du message "Quitter le système d’enchères"
-typedef struct {
-    uint8_t CODE;   // Code du message (13)
-    uint16_t ID;    // Identifiant du pair (2 octets, big-endian)
-} QuitMessage;
+#include "../include/message.h"
 
-typedef struct {
-    uint8_t CODE;   // Code du message (13)
-    uint16_t ID;    // Identifiant du pair (2 octets, big-endian)
-    uint32_t NUMV;  // Numéro de la vente (4 octets)
-    uint32_t PRIX;  // Prix proposé (4 octets)
-} RejetMessage;
+// // Définition du message "Quitter le système d’enchères"
+// typedef struct {
+//     uint8_t CODE;   // Code du message (13)
+//     uint16_t ID;    // Identifiant du pair (2 octets, big-endian)
+// } QuitMessage;
 
-typedef struct {
-    uint8_t CODE;   // Code du message (16, 17 ou 18)
-    uint16_t ID;    // Identifiant du pair
-    uint32_t NUMV;  // Numéro de la vente (uniquement si CODE = 16 ou 17)
-} DisparitionSuperviseurMessage;
+// typedef struct {
+//     uint8_t CODE;   // Code du message (13)
+//     uint16_t ID;    // Identifiant du pair (2 octets, big-endian)
+//     uint32_t NUMV;  // Numéro de la vente (4 octets)
+//     uint32_t PRIX;  // Prix proposé (4 octets)
+// } RejetMessage;
 
-typedef struct {
-    uint8_t CODE;   // Code du message (18)
-    uint16_t ID;    // Identifiant du pair qui envoie le message
-    uint16_t NB;    // Nombre de pairs disparus
-    uint16_t ids[]; // Liste des identifiants des pairs disparus (taille dynamique)
-} DisparitionPairsMessage;
+// typedef struct {
+//     uint8_t CODE;   // Code du message (16, 17 ou 18)
+//     uint16_t ID;    // Identifiant du pair
+//     uint32_t NUMV;  // Numéro de la vente (uniquement si CODE = 16 ou 17)
+// } DisparitionSuperviseurMessage;
 
-typedef struct {
-    uint8_t CODE;
-    uint16_t ID;   // Identifiant du superviseur
-    uint32_t NUMV; // Numéro de la vente
-    uint32_t PRIX; // Prix de la dernière enchère ou prix initial
-} FinalisationVenteMessage;
+// typedef struct {
+//     uint8_t CODE;   // Code du message (18)
+//     uint16_t ID;    // Identifiant du pair qui envoie le message
+//     uint16_t NB;    // Nombre de pairs disparus
+//     uint16_t ids[]; // Liste des identifiants des pairs disparus (taille dynamique)
+// } DisparitionPairsMessage;
 
-typedef struct {
-    uint8_t CODE;
-    uint16_t ID;   // Identifiant du superviseur
-    uint32_t NUMV; // Numéro de la vente
-    uint32_t PRIX; // Prix de la dernière enchère ou prix initial
-} VenteMessage;
+// typedef struct {
+//     uint8_t CODE;
+//     uint16_t ID;   // Identifiant du superviseur
+//     uint32_t NUMV; // Numéro de la vente
+//     uint32_t PRIX; // Prix de la dernière enchère ou prix initial
+// } FinalisationVenteMessage;
 
+// typedef struct {
+//     uint8_t CODE;
+//     uint16_t ID;   // Identifiant du superviseur
+//     uint32_t NUMV; // Numéro de la vente
+//     uint32_t PRIX; // Prix de la dernière enchère ou prix initial
+// } VenteMessage;
+
+// // Structure pour le message de validation
+// typedef struct {
+//     uint8_t code;            // Code de validation (1)
+//     uint16_t id;             // Identifiant du pair
+//     unsigned char signature[crypto_sign_BYTES]; // Signature du message
+// } ValidationMessage;
+
+// typedef struct {
+//     int id;
+//     unsigned char message[256];
+//     unsigned char signature[crypto_sign_BYTES];
+// } SignedMessage;
 
 void envoyer_message(int socket, uint16_t id) {
     QuitMessage msg;
@@ -98,7 +115,6 @@ void envoyer_finalisation_vente(int socket,bool etape, uint16_t id, uint32_t num
     msg.NUMV = htonl(numv);  
     msg.PRIX = htonl(prix);  
 
-   
     send(socket, &msg, sizeof(msg), 0);
 }
 
@@ -138,26 +154,36 @@ void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t num
     }
 }
 
-
-
-int main() {
-    QuitMessage msg;
-    msg.CODE = 13;
-    msg.ID = htons(42); // Exemple d'ID (42)
-
-    // Affichage en hexadécimal pour vérification
-    printf("Message (hex) : %02X %04X\n", msg.CODE, ntohs(msg.ID));
-
-    // Exemple : rejet d'une enchère de l'utilisateur 42 sur la vente 1234 avec un prix de 500€
-    RejetMessage msg1;
-    msg1.CODE = 14;           // 14 : rejet pour concurrence
-    msg1.ID = htons(42);      // ID du pair
-    msg1.NUMV = htonl(1234);  // Numéro de la vente
-    msg1.PRIX = htonl(500);   // Prix proposé
-
-    // Affichage en hexadécimal pour vérifier le format
-    printf("Message (hex) : %02X %04X %08X %08X\n", msg1.CODE, ntohs(msg1.ID), ntohl(msg1.NUMV), ntohl(msg1.PRIX));
-
-
-    return 0;
+void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix) {
+    VenteMessage msg;
+    msg.CODE = 10; // Code d'enchère
+    msg.ID = htons(id);
+    msg.NUMV = htonl(numv);
+    msg.PRIX = htonl(prix);
+    send(socket, &msg, sizeof(msg), 0);
 }
+
+
+
+
+// int main() {
+//     QuitMessage msg;
+//     msg.CODE = 13;
+//     msg.ID = htons(42); // Exemple d'ID (42)
+
+//     // Affichage en hexadécimal pour vérification
+//     printf("Message (hex) : %02X %04X\n", msg.CODE, ntohs(msg.ID));
+
+//     // Exemple : rejet d'une enchère de l'utilisateur 42 sur la vente 1234 avec un prix de 500€
+//     RejetMessage msg1;
+//     msg1.CODE = 14;           // 14 : rejet pour concurrence
+//     msg1.ID = htons(42);      // ID du pair
+//     msg1.NUMV = htonl(1234);  // Numéro de la vente
+//     msg1.PRIX = htonl(500);   // Prix proposé
+
+//     // Affichage en hexadécimal pour vérifier le format
+//     printf("Message (hex) : %02X %04X %08X %08X\n", msg1.CODE, ntohs(msg1.ID), ntohl(msg1.NUMV), ntohl(msg1.PRIX));
+
+
+//     return 0;
+// }
