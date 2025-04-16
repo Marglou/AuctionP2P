@@ -1,3 +1,5 @@
+//message.h
+
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
@@ -57,6 +59,15 @@ typedef struct {
     unsigned char signature[crypto_sign_BYTES]; // Signature Ed25519 (64 octets)
 } ValidationMessageComplet;
 
+typedef struct {
+    uint8_t code;                      // 2
+    uint16_t superviseur_id;           // ID du superviseur
+    uint8_t lmess;                     // longueur du message signé
+    unsigned char message[256];        // message signé
+    uint8_t lsig;                      // longueur de la signature (toujours 64)
+    unsigned char signature[crypto_sign_BYTES];  // signature Ed25519 (64 octets)
+    uint16_t nb_validations;           // nombre de validations reçues
+} FinalMessage;
 
 typedef struct {
     int id;
@@ -70,6 +81,7 @@ typedef struct {
     uint16_t id;                      // ID du pair
     unsigned char public_key[crypto_sign_PUBLICKEYBYTES];  // 32 octets
 } PublicKeyMessage;
+
 
 // Prototypes de fonctions
 

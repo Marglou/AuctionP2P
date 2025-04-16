@@ -1,7 +1,12 @@
+//superviseur.c
+
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#include <sodium.h>
 
 #include "../include/superviseur.h"
 #include "../include/message.h"
@@ -22,7 +27,7 @@ void init_superviseur(Superviseur *s, uint16_t id, uint16_t port) {
 }
 
 Peer known_peers[MAX_PAIRS];  // Tableau contenant les pairs connus (leurs clés publiques)
-int total_peers;              // Total de pairs attendus (hors superviseur)
+int total_peers = 0;              // Total de pairs attendus (hors superviseur)
 
 typedef struct {
     uint16_t id_validators[MAX_PAIRS];
@@ -79,9 +84,54 @@ void* handler_superviseur(void* arg) {
         }
         
 
-        // === Gestion de la validation d’un message ===
+        // Réception d'une validation 
+        if (code == 1) {
+            ValidationMessageComplet *vmsg = (ValidationMessageComplet *)buffer;
+            uint16_t id = ntohs(vmsg->id);
 
+            if (!has_already_validated(id)) {
+                consensus_state.id_validators[consensus_state.num_validations++] = id;
+                printf("[SUPERVISEUR] Validation reçue du pair %d\n", id);
+            }
+
+            // Check if we have all validations
+            if (consensus_state.num_validations >= total_peers) {
+                printf("[SUPERVISEUR] Toutes les validations reçues. Signature et diffusion du message final.\n");
+
+                // Signature du message
+                unsigned char signed_msg[BUFFER_SIZE + crypto_sign_BYTES];
+                unsigned long long signed_len;
+                crypto_sign(signed_msg, &signed_len, 
+                    (unsigned char*)consensus_state.current_message, strlen(consensus_state.current_message),
+                    ((Superviseur*)arg)->private_key);
+
+                // Préparation du message code 2/20
+                FinalMessage final_msg;
+                final_msg.code = 2;
+                final_msg.superviseur_id = htons(((Superviseur*)arg)->id);
+                memcpy(final_msg.message, signed_msg, signed_len);
+                final_msg.lmess = htonl(signed_len);
+
+                // Multidiffusion
+                struct sockaddr_in6 multicast_addr;
+                memset(&multicast_addr, 0, sizeof(multicast_addr));
+                multicast_addr.sin6_family = AF_INET6;
+                multicast_addr.sin6_port = htons(PEER_PORT);
+                inet_pton(AF_INET6, MULTICAST_GROUP, &multicast_addr.sin6_addr);
+
+                sendto(sock, &final_msg, sizeof(FinalMessage), 0,
+                       (struct sockaddr*)&multicast_addr, sizeof(multicast_addr));
+                printf("[SUPERVISEUR] Message final diffusé.\n");
+
+                // Reset pour prochain consensus
+                consensus_state.num_validations = 0;
+                memset(consensus_state.id_validators, 0, sizeof(consensus_state.id_validators));
+            }
+
+            continue;
+        }
     }
 
     return NULL;
 }
+

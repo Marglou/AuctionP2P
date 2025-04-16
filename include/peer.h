@@ -1,3 +1,5 @@
+//peer.h
+
 #ifndef PEER_H
 #define PEER_H
 
@@ -5,7 +7,7 @@
 #include <sodium.h>     
 
 #define MULTICAST_GROUP "ff02::1"
-#define PORT 12345
+#define PEER_PORT 12345
 #define BUFFER_SIZE 1024
 #define MAX_PEERS 4
 

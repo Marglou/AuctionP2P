@@ -1,8 +1,12 @@
+//superviseur.h
+
 #ifndef SUPERVISEUR_H
 #define SUPERVISEUR_H
 
 #include <netinet/in.h>
 #include <sodium.h>
+
+#define SUPERVISEUR_PORT 12346
 
 typedef struct {
     uint16_t id;

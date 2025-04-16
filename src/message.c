@@ -1,3 +1,5 @@
+//message.c
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -7,59 +9,6 @@
 #include <arpa/inet.h> // Pour htonl et htons
 
 #include "../include/message.h"
-
-// // Définition du message "Quitter le système d’enchères"
-// typedef struct {
-//     uint8_t CODE;   // Code du message (13)
-//     uint16_t ID;    // Identifiant du pair (2 octets, big-endian)
-// } QuitMessage;
-
-// typedef struct {
-//     uint8_t CODE;   // Code du message (13)
-//     uint16_t ID;    // Identifiant du pair (2 octets, big-endian)
-//     uint32_t NUMV;  // Numéro de la vente (4 octets)
-//     uint32_t PRIX;  // Prix proposé (4 octets)
-// } RejetMessage;
-
-// typedef struct {
-//     uint8_t CODE;   // Code du message (16, 17 ou 18)
-//     uint16_t ID;    // Identifiant du pair
-//     uint32_t NUMV;  // Numéro de la vente (uniquement si CODE = 16 ou 17)
-// } DisparitionSuperviseurMessage;
-
-// typedef struct {
-//     uint8_t CODE;   // Code du message (18)
-//     uint16_t ID;    // Identifiant du pair qui envoie le message
-//     uint16_t NB;    // Nombre de pairs disparus
-//     uint16_t ids[]; // Liste des identifiants des pairs disparus (taille dynamique)
-// } DisparitionPairsMessage;
-
-// typedef struct {
-//     uint8_t CODE;
-//     uint16_t ID;   // Identifiant du superviseur
-//     uint32_t NUMV; // Numéro de la vente
-//     uint32_t PRIX; // Prix de la dernière enchère ou prix initial
-// } FinalisationVenteMessage;
-
-// typedef struct {
-//     uint8_t CODE;
-//     uint16_t ID;   // Identifiant du superviseur
-//     uint32_t NUMV; // Numéro de la vente
-//     uint32_t PRIX; // Prix de la dernière enchère ou prix initial
-// } VenteMessage;
-
-// // Structure pour le message de validation
-// typedef struct {
-//     uint8_t code;            // Code de validation (1)
-//     uint16_t id;             // Identifiant du pair
-//     unsigned char signature[crypto_sign_BYTES]; // Signature du message
-// } ValidationMessage;
-
-// typedef struct {
-//     int id;
-//     unsigned char message[256];
-//     unsigned char signature[crypto_sign_BYTES];
-// } SignedMessage;
 
 void envoyer_message(int socket, uint16_t id) {
     QuitMessage msg;
@@ -117,8 +66,6 @@ void envoyer_finalisation_vente(int socket,bool etape, uint16_t id, uint32_t num
 
     send(socket, &msg, sizeof(msg), 0);
 }
-
-
 
 void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t numv, uint16_t *ids_disparus, uint16_t nb) {
     if (superviseur) {

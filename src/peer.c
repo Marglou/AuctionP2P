@@ -1,3 +1,5 @@
+//peer.c
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,12 +10,6 @@
 #include "../include/peer.h"
 #include "../include/superviseur.h"
 #include "../include/message.h"
-
-
-#define MULTICAST_GROUP "ff02::1"  // IPv6 multicast group
-#define PORT 12345
-#define BUFFER_SIZE 1024
-#define MAX_PEERS 4 //max number of peers in the auction system
 
 // to keep track of the number of active peers
 extern int active_peers;
@@ -75,7 +71,7 @@ void *peer_handler(void *arg) {
     // Set up multicast address for peer's usage
     memset(&multicast_addr, 0, sizeof(multicast_addr));
     multicast_addr.sin6_family = AF_INET6;
-    multicast_addr.sin6_port = htons(PORT);
+    multicast_addr.sin6_port = htons(PEER_PORT);
     inet_pton(AF_INET6, MULTICAST_GROUP, &multicast_addr.sin6_addr);
 
     // Start the listener thread and pass the socket to it
@@ -102,7 +98,7 @@ void *peer_handler(void *arg) {
             struct sockaddr_in6 superviseur_addr;
             memset(&superviseur_addr, 0, sizeof(superviseur_addr));
             superviseur_addr.sin6_family = AF_INET6;
-            superviseur_addr.sin6_port = htons(PORT);
+            superviseur_addr.sin6_port = htons(PEER_PORT);
             printf("Peer %d: Envoi de la clé publique au superviseur...\n", peer.id);
             // On utilise ici l'ID du superviseur stocké pour déterminer l'adresse du superviseur 
             inet_pton(AF_INET6, "", &superviseur_addr.sin6_addr);  
@@ -160,5 +156,9 @@ void envoyer_cle_publique(int sock, uint16_t id, unsigned char *public_key, stru
     msg.id = htons(id);
     memcpy(msg.public_key, public_key, crypto_sign_PUBLICKEYBYTES);
 
-    sendto(sock, &msg, sizeof(msg), 0, (struct sockaddr*)superviseur_addr, sizeof(*superviseur_addr));
+    if (sendto(sock, &msg, sizeof(msg), 0, (struct sockaddr *)superviseur_addr, sizeof(*superviseur_addr)) < 0) {
+        perror("Failed to send public key message");
+    } else {
+        printf("Public key sent to supervisor.\n");
+    }
 }
