@@ -10,6 +10,7 @@ int main() {
     fgets(nom, sizeof(nom), stdin);
     nom[strcspn(nom, "\n")] = '\0';  // Enlève le \n
 
-    peer_start(nom, "en0");  // Modifie ici l'interface si besoin
+    // peer_start(nom, "en0");  // Pour MAC
+    peer_start(nom, "eth0");  // Pour PC
     return 0;
 }
