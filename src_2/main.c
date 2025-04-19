@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "../include_2/peer.h"
 
 int main() {
@@ -9,6 +10,6 @@ int main() {
     fgets(nom, sizeof(nom), stdin);
     nom[strcspn(nom, "\n")] = '\0';  // Enlève le \n
 
-    peer_start(nom, "eth0");  // Modifie ici l'interface si besoin
+    peer_start(nom, "en0");  // Modifie ici l'interface si besoin
     return 0;
 }

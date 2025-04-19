@@ -19,7 +19,7 @@ $(OUT_DIR)/%.o: $(SRC_DIR)/%.c | $(OUT_DIR)
 
 # Link executable
 $(BIN): $(OBJ)
-	$(CC) $(CFLAGS) $^ -o $@ -lsodium
+	$(CC) $(CFLAGS) $^ -o $@
 
 # Clean build files
 clean:
