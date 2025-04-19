@@ -2,7 +2,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pthread
 OUT_DIR = out
-SRC_DIR = src
+SRC_DIR = src_2
 
 # Source and output files
 SRC = $(wildcard $(SRC_DIR)/*.c)
