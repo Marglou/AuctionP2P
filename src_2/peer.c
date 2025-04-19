@@ -16,7 +16,10 @@
 #define BUF_SIZE 1024
 
 #define PORT_ENCHERE 12346
-#define GROUP_ENCHERE "ff15::efgh"
+
+EnchereSocket encheres[MAX_ENCHERES];
+int nb_encheres = 0;
+int enchere_active = -1; // Index dans encheres[]
 
 static int global_sock = -1;
 static char global_nom[100];
@@ -36,6 +39,11 @@ void handle_sigint(int sig)
 
     sendto(global_sock, leave_msg, strlen(leave_msg), 0,
            (struct sockaddr *)&dest, sizeof(dest));
+
+    close(global_sock);
+    for (int i = 0; i < nb_encheres; i++) {
+        close(encheres[i].sock);
+    }
 
     close(global_sock);
     exit(0);
@@ -132,89 +140,97 @@ void peer_start(const char *nom, const char *interface)
         {
             creer_enchere();
         }
+
         else if (strncmp(buffer, "rejoindre ", 10) == 0) {
             char auction_groupe[INET6_ADDRSTRLEN];
             char auction_id[64];
             if (sscanf(buffer + 10, "%s %s", auction_id, auction_groupe) == 2) {
                 join_enchere(auction_id, auction_groupe);
+                // printf("enchere active : %d\n", enchere_active);
+                // printf("echere active : %s\n", encheres[enchere_active].id);
             }
-            // join_enchere(auction_id, auction_groupe);   
         }
         
-        else
-        {
+        else {
             char msg[BUF_SIZE];
-            snprintf(msg, sizeof(msg), "%s: %s", nom, buffer);
+            snprintf(msg, sizeof(msg), "[%s] %s", nom, buffer);
 
-            sendto(sock, msg, strlen(msg), 0,
-                   (struct sockaddr *)&dest, sizeof(dest));
+                printf("enchere active : %d\n", enchere_active);
+                if (enchere_active >= 0) {
+                struct sockaddr_in6 dest = {0};
+                dest.sin6_family = AF_INET6;
+                dest.sin6_port = htons(PORT_ENCHERE);
+                inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
+                dest.sin6_scope_id = global_iface_index;
+        
+                sendto(encheres[enchere_active].sock, msg, strlen(msg), 0,
+                       (struct sockaddr *)&dest, sizeof(dest));
+
+            } else {
+                struct sockaddr_in6 dest = {0};
+                dest.sin6_family = AF_INET6;
+                dest.sin6_port = htons(PORT);
+                inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
+                dest.sin6_scope_id = global_iface_index;
+        
+                sendto(global_sock, msg, strlen(msg), 0,
+                       (struct sockaddr *)&dest, sizeof(dest));
+            }
         }
+        
     }
 
     close(sock);
+
 }
 
 
 void creer_enchere()
 {
+    if (nb_encheres >= MAX_ENCHERES) {
+        fprintf(stderr, "Le nombre maximum d'enchères a été atteint.\n");
+        return;
+    }
+
     char auction_group[INET6_ADDRSTRLEN];
     char auction_id[64];
 
-    // Générer une adresse d'enchère unique (ici exemple simple)
+    // Génération d'un ID et d'une adresse multicast unique
     snprintf(auction_id, sizeof(auction_id), "auction-%x", rand());
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", rand());
 
-    // printf("Nouvelle enchère créée ! ID: %s, Groupe: %s\n", auction_id, auction_group);
-
-    int iface_index = if_nametoindex("eth0");
-    if (iface_index == 0)
-    {
-        perror("if_nametoindex");
-        exit(EXIT_FAILURE);
-    }
-
-    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (sock < 0)
-    {
-        perror("socket");
-        exit(EXIT_FAILURE);
-    }
-
-    int reuse = 1;
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-
-    struct sockaddr_in6 addr = {0};
-    addr.sin6_family = AF_INET6;
-    addr.sin6_port = htons(PORT_ENCHERE);
-    addr.sin6_addr = in6addr_any;
-    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    {
-        perror("bind");
-        exit(EXIT_FAILURE);
-    }
-
-    struct ipv6_mreq mreq;
-    inet_pton(AF_INET6, auction_group, &mreq.ipv6mr_multiaddr);
-    mreq.ipv6mr_interface = iface_index;
-    setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq));
-
-    // Message à tous les pairs via l'adresse de liaison
+    // Envoi du message NEW_AUCTION à tous les pairs
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
     dest.sin6_port = htons(PORT);
-    inet_pton(AF_INET6, GROUP, &dest.sin6_addr); // liaison_group = adresse globale
-    dest.sin6_scope_id = iface_index;
+    if (inet_pton(AF_INET6, GROUP, &dest.sin6_addr) != 1) {
+        perror("inet_pton (liaison group)");
+        exit(EXIT_FAILURE);
+    }
+    dest.sin6_scope_id = global_iface_index;
 
     char msg[BUF_SIZE];
-    snprintf(msg, sizeof(msg), "[NEW_AUCTION] ID=%s GROUPE=%s \n", auction_id, auction_group);
-    sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)&dest, sizeof(dest));
+    snprintf(msg, sizeof(msg), "[NEW_AUCTION] ID=%s GROUPE=%s\n", auction_id, auction_group);
+
+    // On utilise le socket global pour l’annonce
+    if (sendto(global_sock, msg, strlen(msg), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+        perror("sendto");
+    }
+
+    // Le créateur rejoint lui-même l’enchère
+    join_enchere(auction_id, auction_group);
+
+    printf("Vous avez lancé et rejoint une nouvelle enchère : %s (%s)\n", auction_id, auction_group);
 }
+
 
 
 // Thread pour recevoir les messages du groupe d'enchères
 void *auction_receiver(void *arg)
 {
     int sock = *(int *)arg;
+    free(arg); // Libère la mémoire allouée dynamiquement
+
     char buffer[BUF_SIZE];
     struct sockaddr_in6 src;
     socklen_t srclen = sizeof(src);
@@ -234,19 +250,18 @@ void *auction_receiver(void *arg)
     return NULL;
 }
 
-void join_enchere ( char *auction_id, char *auction_group) {
 
 
-    int iface_index = if_nametoindex("eth0");
-    if (iface_index == 0)
-    {
-        perror("if_nametoindex");
-        exit(EXIT_FAILURE);
+void join_enchere(char *auction_id, char *auction_group) {
+    if (nb_encheres >= MAX_ENCHERES) {
+        fprintf(stderr, "Le nombre maximum d'enchères est atteint.\n");
+        return;
     }
 
+    int iface_index = global_iface_index; // On utilise l’interface déjà connue
+
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (sock < 0)
-    {
+    if (sock < 0) {
         perror("socket");
         exit(EXIT_FAILURE);
     }
@@ -258,8 +273,7 @@ void join_enchere ( char *auction_id, char *auction_group) {
     addr.sin6_family = AF_INET6;
     addr.sin6_port = htons(PORT_ENCHERE);
     addr.sin6_addr = in6addr_any;
-    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    {
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("bind");
         exit(EXIT_FAILURE);
     }
@@ -269,18 +283,36 @@ void join_enchere ( char *auction_id, char *auction_group) {
     mreq.ipv6mr_interface = iface_index;
     setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq));
 
-    // Thread récepteur pour le groupe d'enchères
-    pthread_t auction_tid;
-    pthread_create(&auction_tid, NULL, auction_receiver, &sock);
+    // Enregistrement dans la table globale
+    encheres[nb_encheres].sock = sock;
+    strncpy(encheres[nb_encheres].group, auction_group, INET6_ADDRSTRLEN);
+    strncpy(encheres[nb_encheres].id, auction_id, sizeof(encheres[nb_encheres].id));
 
-    // Message à tous les pairs via l'adresse de liaison
+    // Création du thread de réception
+    int *sock_ptr = malloc(sizeof(int));
+    if (!sock_ptr) {
+        perror("malloc sock_ptr");
+        exit(EXIT_FAILURE);
+    }
+    *sock_ptr = sock;
+
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, auction_receiver, sock_ptr) != 0) {
+        perror("pthread_create");
+        exit(EXIT_FAILURE);
+    }
+
+    nb_encheres++;
+    enchere_active = nb_encheres - 1;
+
+    // Message d’annonce de participation
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
     dest.sin6_port = htons(PORT_ENCHERE);
-    inet_pton(AF_INET6, GROUP_ENCHERE, &dest.sin6_addr); // 
+    inet_pton(AF_INET6, auction_group, &dest.sin6_addr);
     dest.sin6_scope_id = iface_index;
 
     char msg[BUF_SIZE];
-    snprintf(msg, sizeof(msg), "a rejoint l'enchere  ID=%s ADDR=%s", auction_id, auction_group);
+    snprintf(msg, sizeof(msg), "[JOIN_AUCTION] %s a rejoint l'enchère ID=%s\n", global_nom, auction_id);
     sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)&dest, sizeof(dest));
 }
