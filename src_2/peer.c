@@ -1,3 +1,4 @@
+//peer.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,9 +11,12 @@
 #include <sys/socket.h>
 #include <asm-generic/socket.h>
 #include <openssl/sha.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
 
 
 #include "../include_2/peer.h"
+#include "../include_2/superviseur.h"
 
 #define PORT 12365
 #define GROUP "ff15::abcd"
@@ -29,7 +33,6 @@ char id_peer[128]; // ID du pair
 static int global_sock = -1;
 static char nom[100];
 static int global_iface_index = 0;
-
 
 // Gestion de la déconnexion propre avec Ctrl+C
 void handle_sigint(int sig)
@@ -57,34 +60,48 @@ void handle_sigint(int sig)
 }
 
 // Thread de réception
-void *peer_receiver(void *arg)
-{
+void *peer_receiver(void *arg){
     int sock = *(int *)arg;
     char buffer[BUF_SIZE];
     struct sockaddr_in6 src;
     socklen_t srclen = sizeof(src);
 
-    while (1)
-    {
+    while (1){
         ssize_t len = recvfrom(sock, buffer, BUF_SIZE - 1, 0,
                                (struct sockaddr *)&src, &srclen);
 
-        if (len > 0)
-        {
+        if (len > 0){
             buffer[len] = '\0';
             printf("%s", buffer);
             fflush(stdout);
+
+            if (strncmp(buffer, "[VALIDATION]", 12) == 0) {
+                // Extraire le message et la signature
+                char *msg = strchr(buffer, ' ') + 1;
+                char *sig_str = strchr(msg, ' ') + 1;
+                unsigned char sig[EVP_PKEY_size(my_privkey)];
+                size_t siglen = strlen(sig_str) / 2;
+                for (size_t i = 0; i < siglen; i++) {
+                    sscanf(sig_str + 2 * i, "%2hhx", &sig[i]);
+                }
+
+                // Vérifier la signature avec la clé publique du pair
+                EVP_PKEY *peer_pubkey = get_peer_pubkey(nom);
+                if (peer_pubkey && verify_message(peer_pubkey, (unsigned char *)msg, strlen(msg), sig, siglen)) {
+                    printf("Message validé par %s\n", nom);
+                } else {
+                    printf("Échec de la vérification du message de %s\n", nom);
+                }
+            }
         }
     }
     return NULL;
 }
 
 // Démarrage du pair
-void peer_start(const char *nom, const char *interface)
-{
+void peer_start(const char *nom, const char *interface){
     int iface_index = if_nametoindex(interface);
-    if (iface_index == 0)
-    {
+    if (iface_index == 0){
         perror("if_nametoindex");
         exit(EXIT_FAILURE);
     }
@@ -95,8 +112,7 @@ void peer_start(const char *nom, const char *interface)
     generer_id_peer(nom, ipv6_perso);
 
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (sock < 0)
-    {
+    if (sock < 0){
         perror("socket");
         exit(EXIT_FAILURE);
     }
@@ -109,8 +125,7 @@ void peer_start(const char *nom, const char *interface)
     addr.sin6_family = AF_INET6;
     addr.sin6_port = htons(PORT);
     addr.sin6_addr = in6addr_any;
-    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    {
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0){
         perror("bind");
         exit(EXIT_FAILURE);
     }
@@ -146,11 +161,9 @@ void peer_start(const char *nom, const char *interface)
 
     // Envoi des messages
     char buffer[BUF_SIZE];
-    while (fgets(buffer, sizeof(buffer), stdin))
-    {
+    while (fgets(buffer, sizeof(buffer), stdin)){
 
-        if (strcmp(buffer, "lancer\n") == 0)
-        {
+        if (strcmp(buffer, "lancer\n") == 0){
             creer_enchere();
         }
 
@@ -214,6 +227,7 @@ void creer_enchere()
 
     int r = rand() & 0xFFFF; // max 4 chiffres hexadécimaux
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", r);
+    
     // Envoi du message NEW_AUCTION à tous les pairs
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
@@ -242,8 +256,7 @@ void creer_enchere()
 
 
 // Thread pour recevoir les messages du groupe d'enchères
-void *auction_receiver(void *arg)
-{
+void *auction_receiver(void *arg){
     int sock = *(int *)arg;
     free(arg); // Libère la mémoire allouée dynamiquement
 
@@ -251,13 +264,11 @@ void *auction_receiver(void *arg)
     struct sockaddr_in6 src;
     socklen_t srclen = sizeof(src);
 
-    while (1)
-    {
+    while (1){
         ssize_t len = recvfrom(sock, buffer, BUF_SIZE - 1, 0,
                                (struct sockaddr *)&src, &srclen);
 
-        if (len > 0)
-        {
+        if (len > 0){
             buffer[len] = '\0';
             printf("[Enchère] %s", buffer);
             fflush(stdout);
@@ -267,8 +278,7 @@ void *auction_receiver(void *arg)
 }
 
 
-void join_enchere(const char *id, const char *group)
-{
+void join_enchere(const char *id, const char *group){
     //  Vérifier si peut rejoindre l'enchère
     if (nb_encheres >= MAX_ENCHERES) {
         fprintf(stderr, "Nombre maximum d'enchères atteint.\n");

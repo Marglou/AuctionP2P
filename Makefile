@@ -19,7 +19,7 @@ $(OUT_DIR)/%.o: $(SRC_DIR)/%.c | $(OUT_DIR)
 
 # Link executable
 $(BIN): $(OBJ)
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@ -lssl -lcrypto  # Add -lssl -lcrypto here
 
 # Clean build files
 clean:
