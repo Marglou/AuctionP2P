@@ -8,6 +8,9 @@
 #include <netinet/in.h>
 #include <net/if.h>
 #include <sys/socket.h>
+#include <asm-generic/socket.h>
+#include <openssl/sha.h>
+
 
 #include "../include_2/peer.h"
 
@@ -18,18 +21,23 @@
 #define PORT_ENCHERE 12366
 
 EnchereSocket encheres[MAX_ENCHERES];
-int nb_encheres = 0;
+int nb_encheres = 0;    // Nombre d'enchères rejointes
 int enchere_active = -1; // Index dans encheres[]
+int cpt = 0 ; // Compteur pour les enchères qu'il a inité
+char id_peer[128]; // ID du pair
 
 static int global_sock = -1;
-static char global_nom[100];
+static char nom[100];
 static int global_iface_index = 0;
+
 
 // Gestion de la déconnexion propre avec Ctrl+C
 void handle_sigint(int sig)
 {
+    // utiliser sig pour enlever les warnings
+    (void)sig;
     char leave_msg[BUF_SIZE];
-    snprintf(leave_msg, sizeof(leave_msg), "[LEAVE] %s a quitté le groupe.\n", global_nom);
+    snprintf(leave_msg, sizeof(leave_msg), "[LEAVE] %s a quitté le groupe.\n", nom);
 
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
@@ -45,7 +53,6 @@ void handle_sigint(int sig)
         close(encheres[i].sock);
     }
 
-    close(global_sock);
     exit(0);
 }
 
@@ -82,6 +89,11 @@ void peer_start(const char *nom, const char *interface)
         exit(EXIT_FAILURE);
     }
 
+    // Générer l'ID du pair
+    char ipv6_perso[INET6_ADDRSTRLEN];
+    snprintf(ipv6_perso, sizeof(ipv6_perso), "fe80::%x", iface_index);
+    generer_id_peer(nom, ipv6_perso);
+
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sock < 0)
     {
@@ -109,11 +121,11 @@ void peer_start(const char *nom, const char *interface)
     setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq));
 
     // Infos globales pour SIGINT
-    strncpy(global_nom, nom, sizeof(global_nom));
     global_iface_index = iface_index;
     global_sock = sock;
 
     signal(SIGINT, handle_sigint);
+
 
     // Notifier les autres de la connexion
     char join_msg[BUF_SIZE];
@@ -147,15 +159,16 @@ void peer_start(const char *nom, const char *interface)
             char auction_id[64];
             if (sscanf(buffer + 10, "%s %s", auction_id, auction_groupe) == 2) {
                 join_enchere(auction_id, auction_groupe);
-                // printf("enchere active : %d\n", enchere_active);
-                // printf("echere active : %s\n", encheres[enchere_active].id);
             }
         }
         
         else {
             char msg[BUF_SIZE];
             snprintf(msg, sizeof(msg), "[%s] %s", nom, buffer);
-
+            if (strlen(msg) >= sizeof(msg)) {
+                fprintf(stderr, "Erreur : le message est trop long pour le tampon.\n");
+            }
+            
                 printf("enchere active : %d\n", enchere_active);
                 if (enchere_active >= 0) {
                 struct sockaddr_in6 dest = {0};
@@ -197,8 +210,8 @@ void creer_enchere()
     char auction_id[64];
 
     // Génération d'un ID et d'une adresse multicast unique
-    snprintf(auction_id, sizeof(auction_id), "auction-%x", rand());
-    //snprintf(auction_group, sizeof(auction_group), "ff15::%x", rand());
+    snprintf(auction_id, sizeof(auction_id), "%.60s-%d", id_peer, cpt + 1);
+
     int r = rand() & 0xFFFF; // max 4 chiffres hexadécimaux
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", r);
     // Envoi du message NEW_AUCTION à tous les pairs
@@ -223,6 +236,7 @@ void creer_enchere()
     join_enchere(auction_id, auction_group);
 
     printf("Vous avez lancé et rejoint une nouvelle enchère : %s (%s)\n", auction_id, auction_group);
+    cpt++ ; // Incrémente le compteur d'enchères initiées
 }
 
 
@@ -255,9 +269,18 @@ void *auction_receiver(void *arg)
 
 void join_enchere(const char *id, const char *group)
 {
+    //  Vérifier si peut rejoindre l'enchère
     if (nb_encheres >= MAX_ENCHERES) {
         fprintf(stderr, "Nombre maximum d'enchères atteint.\n");
         return;
+    }
+
+    // Vérifier si l'enchère existe déjà
+    for (int i = 0; i < nb_encheres; i++) {
+        if (strcmp(encheres[i].id, id) == 0) {
+            fprintf(stderr, "Vous êtes déjà dans l'enchère %s.\n", id);
+            return;
+        }
     }
 
     // Création du socket dédié à l'enchère
@@ -320,3 +343,24 @@ void join_enchere(const char *id, const char *group)
 
     nb_encheres++;
 }
+
+void generer_id_peer(const char *nom, char *ipv6_perso) {
+    struct in6_addr addr;
+    // Conversion de l'adresse IPv6 en structure in6_addr
+    if (inet_pton(AF_INET6, ipv6_perso, &addr) != 1) {
+        perror("inet_pton");
+        return;
+    }
+
+    // Utiliser les 4 premiers octets de l'adresse IPv6 pour créer une valeur
+    unsigned int ipv6_part = 0;
+    for (int i = 0; i < 4; i++) {
+        ipv6_part = (ipv6_part << 8) | addr.s6_addr[i];
+    }
+
+    srand(time(NULL)); // Initialiser le générateur de nombres aléatoires
+    // Générer un ID basé sur l'adresse et le nom
+    snprintf(id_peer, sizeof(id_peer), "%s-%x%d", nom, ipv6_part, rand() % 1000);
+}
+
+

@@ -28,4 +28,6 @@ void *auction_receiver(void *arg);
 void *peer_receiver(void *arg);
 void handle_sigint(int sig);
 
+void generer_id_peer(const char *nom, char *ipv6_perso);
+
 #endif // PEER_H

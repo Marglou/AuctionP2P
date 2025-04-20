@@ -15,7 +15,7 @@ $(OUT_DIR):
 
 # Compile object files
 $(OUT_DIR)/%.o: $(SRC_DIR)/%.c | $(OUT_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@ -lssl -lcrypto
 
 # Link executable
 $(BIN): $(OBJ)
