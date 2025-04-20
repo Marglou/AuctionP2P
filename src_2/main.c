@@ -46,8 +46,8 @@ int main() {
     register_peer(nom, my_pubkey);
 
     // peer_start(nom, "en0");  // Pour MAC
-    // peer_start(nom, "eth0");  // Pour PC
-    peer_start(nom, "enp0s3");
+    peer_start(nom, "eth0");  
+    // peer_start(nom, "enp0s3");
 
     cleanup_superviseur();
     EVP_PKEY_free(my_privkey);
