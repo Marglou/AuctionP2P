@@ -15,9 +15,10 @@
 #include <openssl/err.h>
 
 
-#include "../include_2/peer.h"
-#include "../include_2/superviseur.h"
-#include "../include_2/enchere.h"
+#include "../include/peer.h"
+#include "../include/superviseur.h"
+#include "../include/enchere.h"
+#include <sys/select.h>
 
 #define PORT 12365
 #define GROUP "ff15::abcd"
@@ -146,20 +147,66 @@ void peer_start(const char *nom, const char *interface){
     signal(SIGINT, handle_sigint);
 
 
-    // Notifier les autres de la connexion
-    char join_msg[BUF_SIZE];
-    snprintf(join_msg, sizeof(join_msg), "[JOIN] %s a rejoint le groupe.\n", nom);
-
+    // ========================
+    // PROTOCOLE DE REJOINDRE
+    // ========================
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
     dest.sin6_port = htons(PORT);
     inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
     dest.sin6_scope_id = iface_index;
 
-    sendto(sock, join_msg, strlen(join_msg), 0,
-           (struct sockaddr *)&dest, sizeof(dest));
+    int joined = 0;
+    int attempts = 0;
+    char join_msg[BUF_SIZE];
 
-    // Thread récepteur
+    while (attempts < 3 && !joined) {
+        attempts++;
+        snprintf(join_msg, sizeof(join_msg), "[JOIN] %s a rejoint le groupe.\n", nom);
+        sendto(sock, join_msg, strlen(join_msg), 0,
+               (struct sockaddr *)&dest, sizeof(dest));
+        printf("Demande de rejoindre envoyée (%d/3)...\n", attempts);
+
+        fd_set readfds;
+        struct timeval timeout;
+
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds);
+
+        timeout.tv_sec = 5;
+        timeout.tv_usec = 0;
+
+        int ready = select(sock + 1, &readfds, NULL, NULL, &timeout);
+        if (ready > 0 && FD_ISSET(sock, &readfds)) {
+            char buf[BUF_SIZE];
+            struct sockaddr_in6 from;
+            socklen_t fromlen = sizeof(from);
+            ssize_t len = recvfrom(sock, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&from, &fromlen);
+            if (len > 0) {
+                buf[len] = '\0';
+                if (strstr(buf, "[ACCEPTED]") != NULL) {
+                    printf("Système d’enchères existant détecté. Rejoint.\n");
+                    joined = 1;
+                    break;
+                }
+            }
+        } 
+        else if (ready == 0) {
+            printf("Timeout atteint, nouvelle tentative...\n");
+        } 
+        else {
+            perror("select");
+        }
+    }
+
+    if (!joined) {
+        printf("Aucun système détecté après 3 tentatives. Ce pair crée le système d’enchères.\n");
+        // Ajoute ici l'initialisation du système si nécessaire (ex: créer_enchere_initiale())
+    }
+
+    // ========================
+    // THREAD RÉCEPTEUR
+    // ========================
     pthread_t tid;
     pthread_create(&tid, NULL, peer_receiver, &sock);
 
@@ -210,13 +257,8 @@ void peer_start(const char *nom, const char *interface){
         }
         
     }
-
     close(sock);
-
 }
-
-
-
 
 void generer_id_peer(const char *nom, char *ipv6_perso) {
     struct in6_addr addr;

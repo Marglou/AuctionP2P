@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <sodium.h>
 #include <string.h>
 #include <arpa/inet.h> // Pour htonl et htons
 
@@ -109,28 +108,3 @@ void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix) {
     msg.PRIX = htonl(prix);
     send(socket, &msg, sizeof(msg), 0);
 }
-
-
-
-
-// int main() {
-//     QuitMessage msg;
-//     msg.CODE = 13;
-//     msg.ID = htons(42); // Exemple d'ID (42)
-
-//     // Affichage en hexadécimal pour vérification
-//     printf("Message (hex) : %02X %04X\n", msg.CODE, ntohs(msg.ID));
-
-//     // Exemple : rejet d'une enchère de l'utilisateur 42 sur la vente 1234 avec un prix de 500€
-//     RejetMessage msg1;
-//     msg1.CODE = 14;           // 14 : rejet pour concurrence
-//     msg1.ID = htons(42);      // ID du pair
-//     msg1.NUMV = htonl(1234);  // Numéro de la vente
-//     msg1.PRIX = htonl(500);   // Prix proposé
-
-//     // Affichage en hexadécimal pour vérifier le format
-//     printf("Message (hex) : %02X %04X %08X %08X\n", msg1.CODE, ntohs(msg1.ID), ntohl(msg1.NUMV), ntohl(msg1.PRIX));
-
-
-//     return 0;
-// }

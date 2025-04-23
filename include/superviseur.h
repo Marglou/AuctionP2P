@@ -1,21 +1,21 @@
 //superviseur.h
-
 #ifndef SUPERVISEUR_H
 #define SUPERVISEUR_H
 
-#include <netinet/in.h>
-#include <sodium.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
 
-#define SUPERVISEUR_PORT 12346
+#define MAX_PEERS 5
 
-typedef struct {
-    uint16_t id;
-    unsigned char private_key[crypto_sign_SECRETKEYBYTES];
-    unsigned char public_key[crypto_sign_PUBLICKEYBYTES];
-    struct sockaddr_in6 addr;
-} Superviseur;
+void init_superviseur();
+void cleanup_superviseur();
+int register_peer(const char *name, EVP_PKEY *pubkey);
+EVP_PKEY* get_peer_pubkey(const char *name);
 
-void init_superviseur(Superviseur *s, uint16_t id, uint16_t port);
-void* handler_superviseur(void* arg);
+EVP_PKEY* generate_ed25519_key();
+int sign_message(EVP_PKEY *privkey, const unsigned char *msg, size_t msglen,
+                 unsigned char *sig, size_t *siglen);
+int verify_message(EVP_PKEY *pubkey, const unsigned char *msg, size_t msglen,
+                   const unsigned char *sig, size_t siglen);
 
 #endif

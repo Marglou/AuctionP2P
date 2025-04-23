@@ -1,3 +1,4 @@
+//enchere.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,11 +7,10 @@
 #include <sys/socket.h>
 #include <asm-generic/socket.h>
 
-#include "../include_2/enchere.h"
-#include "../include_2/superviseur.h"
-#include "../include_2/peer.h"
+#include "../include/enchere.h"
+#include "../include/superviseur.h"
+#include "../include/peer.h"
 #include <sys/select.h>
-
 
 
 void join_enchere(const char *id, const char *group){
@@ -85,6 +85,11 @@ void join_enchere(const char *id, const char *group){
     pthread_create(&tid, NULL, auction_receiver, sock_ptr);
 
     printf("Vous avez rejoint l'enchère %s sur %s\n", id, group);
+
+    // Send ACCEPTED message
+    char accept_msg[BUF_SIZE];
+    snprintf(accept_msg, sizeof(accept_msg), "[ACCEPTED] Vous avez rejoint l'enchère %s\n", id);
+    sendto(sock, accept_msg, strlen(accept_msg), 0, (struct sockaddr *)&addr, sizeof(addr));
 
     nb_encheres++;
 }

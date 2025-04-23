@@ -1,50 +1,61 @@
 //peer.h
-
 #ifndef PEER_H
 #define PEER_H
 
-#include <netinet/in.h>  // pour struct sockaddr_in6
-#include <sodium.h>     
+#include <netinet/in.h>
+#include <pthread.h>
+#include <openssl/evp.h>
 
-#define MULTICAST_GROUP "ff02::1"
-#define PEER_PORT 12345
-#define BUFFER_SIZE 1024
-#define MAX_PEERS 4
+#define PORT 12365
+#define GROUP "ff15::abcd"
+#define BUF_SIZE 1024
 
-// Variables globales (déclarées dans main.c)
-extern int active_peers;
-extern pthread_mutex_t peer_count_mutex;
+#define PORT_ENCHERE 12366
+#define GROUP_ENCHERE "ff15::efgh"
 
-// Déclaration des clés publiques de tous les pairs
-extern unsigned char public_keys[MAX_PEERS][crypto_sign_PUBLICKEYBYTES];
-extern unsigned char private_keys[MAX_PEERS][crypto_sign_SECRETKEYBYTES];
+#define MAX_ENCHERES 5
 
-
-// Définition de la structure pour un pair
 typedef struct {
-    int id;
-    unsigned char public_key[crypto_sign_PUBLICKEYBYTES];
-    unsigned char private_key[crypto_sign_SECRETKEYBYTES];
+    int sock;
+    char group[INET6_ADDRSTRLEN];
+    char id[64];
+} EnchereSocket;
+
+typedef struct {
+    char name[100];
+    EVP_PKEY *pubkey;
 } Peer;
 
-
-// Fonctions du peer
-void *start_listener(void *arg);
-void send_multicast_message(int sock, struct sockaddr_in6 *multicast_addr, const char *message);
-void *peer_handler(void *arg);
-
-
-// Génération des clés (privée et publique)
-void generate_keys_for_peer(Peer *peer);
-
-// Fonction de signature
-int sign_message(const unsigned char *message, size_t message_len, unsigned char *signed_message, unsigned char *private_key);
-
-// Fonction de vérification de la signature
-int verify_signature(const unsigned char *message, size_t message_len, const unsigned char *signature, const unsigned char *public_key);
-
-// Fonction d'envoi de la clé publique
-void envoyer_cle_publique(int sock, uint16_t id, unsigned char *public_key, struct sockaddr_in6 *superviseur_addr);
+typedef struct {
+    struct in6_addr addr;
+    uint16_t port_udp;
+    uint16_t port_tcp;
+} AdressePerso;
 
 
-#endif 
+// Global variables for private and public keys
+extern EVP_PKEY *my_privkey;
+extern EVP_PKEY *my_pubkey;
+
+extern EnchereSocket encheres[MAX_ENCHERES];
+extern int nb_encheres;    // Nombre d'enchères rejointes
+extern int enchere_active; // Index dans encheres[]
+extern int cpt; // Compteur pour les enchères qu'il a initié
+extern char id_peer[128]; // ID du pair
+extern int global_sock; // Socket global
+extern char nom[100]; // Nom du pair
+extern int global_iface_index; // Index de l'interface réseau
+
+
+
+// Fonctions principales
+void peer_start(const char *nom, const char *interface);
+
+void *auction_receiver(void *arg);
+void *peer_receiver(void *arg);
+void handle_sigint(int sig);
+
+void generer_id_peer(const char *nom, char *ipv6_perso);
+void creer_adresse_perso(int port_udp, int port_tcp, int iface_index);
+
+#endif // PEER_H

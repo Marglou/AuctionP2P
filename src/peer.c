@@ -1,164 +1,252 @@
 //peer.c
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <pthread.h>
+#include <signal.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include <sys/socket.h>
+#include <asm-generic/socket.h>
+#include <openssl/sha.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
+
 
 #include "../include/peer.h"
 #include "../include/superviseur.h"
-#include "../include/message.h"
+#include "../include/enchere.h"
 
-// to keep track of the number of active peers
-extern int active_peers;
-extern pthread_mutex_t peer_count_mutex;
+#define PORT 12365
+#define GROUP "ff15::abcd"
+#define BUF_SIZE 1024
 
-Superviseur superviseur;
-int is_superviseur = 0; // Flag pour vérifier si c'est le superviseur
-int supervisor_id = 0; // ID du superviseur
+#define PORT_ENCHERE 12366
 
-// to handle receiving multicast messages
-void *start_listener(void *arg) {
-    int sock = *((int *)arg);  // Cast arg to socket descriptor
-    struct sockaddr_in6 addr;
-    char buffer[BUFFER_SIZE];
-    memset(buffer, 0, sizeof(buffer));
+AdressePerso mon_adresse_perso;
+EnchereSocket encheres[MAX_ENCHERES];
+int nb_encheres = 0;    // Nombre d'enchères rejointes
+int enchere_active = -1; // Index dans encheres[]
+int cpt = 0 ; // Compteur pour les enchères qu'il a inité
+char id_peer[128]; // ID du pair
 
-    // Receive messages
-    while (1) {
-        socklen_t addrlen = sizeof(addr);
-        int bytes_received = recvfrom(sock, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
-        if (bytes_received > 0) {
-            buffer[bytes_received] = '\0';
-            printf("Received: %s\n", buffer);
-        }
+int global_sock = -1;
+char nom[100];
+int global_iface_index = 0;
+
+// Gestion de la déconnexion propre avec Ctrl+C
+void handle_sigint(int sig)
+{
+    // utiliser sig pour enlever les warnings
+    (void)sig;
+    char leave_msg[BUF_SIZE];
+    snprintf(leave_msg, sizeof(leave_msg), "[LEAVE] %s a quitté le groupe.\n", nom);
+
+    struct sockaddr_in6 dest = {0};
+    dest.sin6_family = AF_INET6;
+    dest.sin6_port = htons(PORT);
+    inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
+    dest.sin6_scope_id = global_iface_index;
+
+    sendto(global_sock, leave_msg, strlen(leave_msg), 0,
+           (struct sockaddr *)&dest, sizeof(dest));
+
+    close(global_sock);
+    for (int i = 0; i < nb_encheres; i++) {
+        close(encheres[i].sock);
     }
 
+    exit(0);
+}
+
+// Thread de réception
+void *peer_receiver(void *arg){
+    int sock = *(int *)arg;
+    char buffer[BUF_SIZE];
+    struct sockaddr_in6 src;
+    socklen_t srclen = sizeof(src);
+
+    while (1){
+        ssize_t len = recvfrom(sock, buffer, BUF_SIZE - 1, 0,
+                               (struct sockaddr *)&src, &srclen);
+
+        if (len > 0){
+            buffer[len] = '\0';
+            printf("%s", buffer);
+            fflush(stdout);
+
+            if (strncmp(buffer, "[VALIDATION]", 12) == 0) {
+                // Extraire le message et la signature
+                char *msg = strchr(buffer, ' ') + 1;
+                char *sig_str = strchr(msg, ' ') + 1;
+                unsigned char sig[EVP_PKEY_size(my_privkey)];
+                size_t siglen = strlen(sig_str) / 2;
+                for (size_t i = 0; i < siglen; i++) {
+                    sscanf(sig_str + 2 * i, "%2hhx", &sig[i]);
+                }
+
+                // Vérifier la signature avec la clé publique du pair
+                EVP_PKEY *peer_pubkey = get_peer_pubkey(nom);
+                if (peer_pubkey && verify_message(peer_pubkey, (unsigned char *)msg, strlen(msg), sig, siglen)) {
+                    printf("Message validé par %s\n", nom);
+                } else {
+                    printf("Échec de la vérification du message de %s\n", nom);
+                }
+            }
+        }
+    }
     return NULL;
 }
 
-// to send multicast messages
-void send_multicast_message(int sock, struct sockaddr_in6 *multicast_addr, const char *message) {
-    if (sendto(sock, message, strlen(message), 0, (struct sockaddr *)multicast_addr, sizeof(*multicast_addr)) < 0) {
-        perror("Sending multicast message failed");
-    } else {
-        printf("Sent multicast message: %s\n", message);
-    }
-}
-
-void *peer_handler(void *arg) {
-    int sock = *((int *)arg);  // Get the socket passed from main
-    pthread_mutex_lock(&peer_count_mutex);
-    if (active_peers >= MAX_PEERS) {
-        pthread_mutex_unlock(&peer_count_mutex);
-        printf("Max peer limit reached. Cannot join the auction.\n");
-        return NULL;
-    }
-    active_peers++;
-    pthread_mutex_unlock(&peer_count_mutex);
-
-    printf("Peer joined. Active peers: %d\n", active_peers);
-
-    // Créer un pair avec un identifiant unique
-    Peer peer;
-    peer.id = active_peers;  // Assigner l'id du pair
-    generate_keys_for_peer(&peer);  // Générer les clés pour ce pair
-
-
-    struct sockaddr_in6 multicast_addr;  // Declare the multicast address here
-    // Set up multicast address for peer's usage
-    memset(&multicast_addr, 0, sizeof(multicast_addr));
-    multicast_addr.sin6_family = AF_INET6;
-    multicast_addr.sin6_port = htons(PEER_PORT);
-    inet_pton(AF_INET6, MULTICAST_GROUP, &multicast_addr.sin6_addr);
-
-    // Start the listener thread and pass the socket to it
-    pthread_t listener_thread;
-    if (pthread_create(&listener_thread, NULL, start_listener, (void *)&sock) != 0) {
-        perror("Failed to create listener thread");
-        close(sock);
-        return NULL;
-    }
-
-    // Simulate sending an auction message
-    sleep(2);  // Ensure listener is running
-
-    // Si ce pair est le premier, il devient le superviseur
-    if (active_peers == 1) {
-        supervisor_id = peer.id;  // Le premier pair devient le superviseur
-        printf("Peer %d is the supervisor.\n", peer.id);
-        is_superviseur = 1;
-        send_multicast_message(sock, &multicast_addr, "Démarrage de l'enchère : Item X starting at 100 units");
-
-    } else {
-        // Si ce n'est pas le superviseur, on envoie la clé publique au superviseur
-        if (!is_superviseur) {
-            struct sockaddr_in6 superviseur_addr;
-            memset(&superviseur_addr, 0, sizeof(superviseur_addr));
-            superviseur_addr.sin6_family = AF_INET6;
-            superviseur_addr.sin6_port = htons(PEER_PORT);
-            printf("Peer %d: Envoi de la clé publique au superviseur...\n", peer.id);
-            // On utilise ici l'ID du superviseur stocké pour déterminer l'adresse du superviseur 
-            inet_pton(AF_INET6, "", &superviseur_addr.sin6_addr);  
-            envoyer_cle_publique(sock, peer.id, peer.public_key, &superviseur_addr);
-        }
-    }
-
-    send_multicast_message(sock, &multicast_addr, "New auction: Item X starting at 100 units");
-
-    // Wait for listener thread to finish
-    pthread_join(listener_thread, NULL);
-
-    // Peer leaving the auction
-    pthread_mutex_lock(&peer_count_mutex);
-    active_peers--;
-    pthread_mutex_unlock(&peer_count_mutex);
-    printf("Peer left. Active peers: %d\n", active_peers);
-
-    close(sock);
-    return NULL;
-}
-
-
-
-// Fonction pour générer des clés pour un pair
-void generate_keys_for_peer(Peer *peer) {
-    if (crypto_sign_keypair(peer->public_key, peer->private_key) != 0) {
-        fprintf(stderr, "Erreur de génération de clés pour le pair\n");
+// Démarrage du pair
+void peer_start(const char *nom, const char *interface){
+    int iface_index = if_nametoindex(interface);
+    if (iface_index == 0){
+        perror("if_nametoindex");
         exit(EXIT_FAILURE);
     }
-    printf("Clés générées pour le pair %d\n", peer->id);
+
+    // Générer l'ID du pair
+    char ipv6_perso[INET6_ADDRSTRLEN];
+    snprintf(ipv6_perso, sizeof(ipv6_perso), "fe80::%x", iface_index);
+    generer_id_peer(nom, ipv6_perso);
+    creer_adresse_perso(PORT, PORT + 1, iface_index); 
+
+
+    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (sock < 0){
+        perror("socket");
+        exit(EXIT_FAILURE);
+    }
+
+    int reuse = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+
+    struct sockaddr_in6 addr = {0};
+    addr.sin6_family = AF_INET6;
+    addr.sin6_port = htons(PORT);
+    addr.sin6_addr = in6addr_any;
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0){
+        perror("bind");
+        exit(EXIT_FAILURE);
+    }
+
+    struct ipv6_mreq mreq;
+    inet_pton(AF_INET6, GROUP, &mreq.ipv6mr_multiaddr);
+    mreq.ipv6mr_interface = iface_index;
+    setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq));
+
+    // Infos globales pour SIGINT
+    global_iface_index = iface_index;
+    global_sock = sock;
+
+    signal(SIGINT, handle_sigint);
+
+
+    // Notifier les autres de la connexion
+    char join_msg[BUF_SIZE];
+    snprintf(join_msg, sizeof(join_msg), "[JOIN] %s a rejoint le groupe.\n", nom);
+
+    struct sockaddr_in6 dest = {0};
+    dest.sin6_family = AF_INET6;
+    dest.sin6_port = htons(PORT);
+    inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
+    dest.sin6_scope_id = iface_index;
+
+    sendto(sock, join_msg, strlen(join_msg), 0,
+           (struct sockaddr *)&dest, sizeof(dest));
+
+    // Thread récepteur
+    pthread_t tid;
+    pthread_create(&tid, NULL, peer_receiver, &sock);
+
+    // Envoi des messages
+    char buffer[BUF_SIZE];
+    while (fgets(buffer, sizeof(buffer), stdin)){
+
+        if (strcmp(buffer, "lancer\n") == 0){
+            creer_enchere();
+        }
+
+        else if (strncmp(buffer, "rejoindre ", 10) == 0) {
+            char auction_groupe[INET6_ADDRSTRLEN];
+            char auction_id[64];
+            if (sscanf(buffer + 10, "%s %s", auction_id, auction_groupe) == 2) {
+                join_enchere(auction_id, auction_groupe);
+            }
+        }
+        
+        else {
+            char msg[BUF_SIZE];
+            snprintf(msg, sizeof(msg), "[%s] %s", nom, buffer);
+            if (strlen(msg) >= sizeof(msg)) {
+                fprintf(stderr, "Erreur : le message est trop long pour le tampon.\n");
+            }
+            
+                printf("enchere active : %d\n", enchere_active);
+                if (enchere_active >= 0) {
+                struct sockaddr_in6 dest = {0};
+                dest.sin6_family = AF_INET6;
+                dest.sin6_port = htons(PORT_ENCHERE);
+                inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
+                dest.sin6_scope_id = global_iface_index;
+        
+                sendto(encheres[enchere_active].sock, msg, strlen(msg), 0,
+                       (struct sockaddr *)&dest, sizeof(dest));
+
+            } else {
+                struct sockaddr_in6 dest = {0};
+                dest.sin6_family = AF_INET6;
+                dest.sin6_port = htons(PORT);
+                inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
+                dest.sin6_scope_id = global_iface_index;
+        
+                sendto(global_sock, msg, strlen(msg), 0,
+                       (struct sockaddr *)&dest, sizeof(dest));
+            }
+        }
+        
+    }
+
+    close(sock);
+
 }
 
-int sign_message(const unsigned char *message, size_t message_len, unsigned char *signed_message, unsigned char *private_key) {
-    unsigned long long signed_message_len;
-    
-    if (crypto_sign(signed_message, &signed_message_len, message, message_len, private_key) != 0) {
-        fprintf(stderr, "Erreur lors de la signature du message.\n");
-        return -1;
+
+
+
+void generer_id_peer(const char *nom, char *ipv6_perso) {
+    struct in6_addr addr;
+    // Conversion de l'adresse IPv6 en structure in6_addr
+    if (inet_pton(AF_INET6, ipv6_perso, &addr) != 1) {
+        perror("inet_pton");
+        return;
     }
-    
-    return signed_message_len;
+
+    // Utiliser les 4 premiers octets de l'adresse IPv6 pour créer une valeur
+    unsigned int ipv6_part = 0;
+    for (int i = 0; i < 4; i++) {
+        ipv6_part = (ipv6_part << 8) | addr.s6_addr[i];
+    }
+
+    srand(time(NULL)); // Initialiser le générateur de nombres aléatoires
+    // Générer un ID basé sur l'adresse et le nom
+    snprintf(id_peer, sizeof(id_peer), "%s-%x%d", nom, ipv6_part, rand() % 1000);
 }
 
-int verify_signature(const unsigned char *message, size_t message_len, const unsigned char *signature, const unsigned char *public_key) {
-    if (crypto_sign_verify_detached(signature, message, message_len, public_key) != 0) {
-        return -1;  // Signature invalide
-    }
-    return 0;  // Signature valide
-}
 
-void envoyer_cle_publique(int sock, uint16_t id, unsigned char *public_key, struct sockaddr_in6 *superviseur_addr) {
-    PublicKeyMessage msg;
-    msg.code = PUBLIC_KEY_MSG_CODE;
-    msg.id = htons(id);
-    memcpy(msg.public_key, public_key, crypto_sign_PUBLICKEYBYTES);
+void creer_adresse_perso(int port_udp, int port_tcp, int iface_index) {
+    char ipv6_str[INET6_ADDRSTRLEN];
+    snprintf(ipv6_str, sizeof(ipv6_str), "fe80::%x", iface_index);  // adresse lien-local fictive
 
-    if (sendto(sock, &msg, sizeof(msg), 0, (struct sockaddr *)superviseur_addr, sizeof(*superviseur_addr)) < 0) {
-        perror("Failed to send public key message");
-    } else {
-        printf("Public key sent to supervisor.\n");
+    if (inet_pton(AF_INET6, ipv6_str, &mon_adresse_perso.addr) != 1) {
+        perror("inet_pton");
+        exit(EXIT_FAILURE);
     }
+
+    mon_adresse_perso.port_udp = port_udp;
+    mon_adresse_perso.port_tcp = port_tcp;
 }
