@@ -25,16 +25,18 @@
 
 #define PORT_ENCHERE 12366
 
-AdressePerso mon_adresse_perso;
 EnchereSocket encheres[MAX_ENCHERES];
 int nb_encheres = 0;    // Nombre d'enchères rejointes
 int enchere_active = -1; // Index dans encheres[]
-int cpt = 0 ; // Compteur pour les enchères qu'il a inité
+int cpt = 0 ; // Compteur pour les enchères qu'il a initié
 char id_peer[128]; // ID du pair
 
 int global_sock = -1;
 char nom[100];
 int global_iface_index = 0;
+
+int socket_tcp = -1; // Socket TCP pour la connexion
+int port_tcp = -1; // Port TCP pour la connexion
 
 // Gestion de la déconnexion propre avec Ctrl+C
 void handle_sigint(int sig)
@@ -54,6 +56,7 @@ void handle_sigint(int sig)
            (struct sockaddr *)&dest, sizeof(dest));
 
     close(global_sock);
+    close(socket_tcp);
     for (int i = 0; i < nb_encheres; i++) {
         close(encheres[i].sock);
     }
@@ -61,7 +64,6 @@ void handle_sigint(int sig)
     exit(0);
 }
 
-// Thread de réception
 void *peer_receiver(void *arg){
     int sock = *(int *)arg;
     char buffer[BUF_SIZE];
@@ -74,11 +76,80 @@ void *peer_receiver(void *arg){
 
         if (len > 0){
             buffer[len] = '\0';
+
+            // Gestion des messages binaires avec code
+            uint8_t code = (uint8_t)buffer[0];
+
+            // ###############################################
+            // Protocole pour rejoindre un système d'enchères
+            // ###############################################
+            if (code == 3 && len == 3 && nb_encheres > 0) { // CODE 3 : recoit demande pour rejoindre un système d'enchère
+                uint16_t port_tcp_dest;
+                memcpy(&port_tcp_dest, &buffer[1], 2);  // Extraire le port du message reçu
+
+                char ip_str[INET6_ADDRSTRLEN];
+                inet_ntop(AF_INET6, &src.sin6_addr, ip_str, sizeof(ip_str));  // Convertir l'adresse IP en chaîne
+                
+                // Création de la structure sockaddr_in6 pour la connexion TCP
+                struct sockaddr_in6 dest_tcp = {0};
+                dest_tcp.sin6_family = AF_INET6;
+                dest_tcp.sin6_port = htons(port_tcp_dest);  // Utiliser le port du serveur
+                dest_tcp.sin6_addr = src.sin6_addr;  // Utiliser l'adresse IP du pair
+                
+                printf("Demande de liaison reçue (CODE 3) : %s:%u\n", ip_str, ntohs(port_tcp_dest));
+                if (IN6_IS_ADDR_LINKLOCAL(&src.sin6_addr)) {
+                    printf("Adresse link-local détectée.\n");
+                    dest_tcp.sin6_scope_id = global_iface_index;  // Spécifier l'index de l'interface
+                }
+
+                // Créer un socket TCP
+                int sock = socket(AF_INET6, SOCK_STREAM, 0);
+                if (sock < 0) {
+                    perror("socket");
+                    return -1;
+                }
+                
+                // Connexion au serveur
+                if (connect(sock, (struct sockaddr *)&dest_tcp, sizeof(dest_tcp)) == 0) {
+                    // Si la connexion est réussie, envoyer une réponse
+                    char response[] = "Bienvenue dans le système !";
+                    send(sock, response, strlen(response), 0);
+                    printf("Réponse envoyée\n");
+                    close(sock);  // Fermer le socket après l'envoi
+                } else {
+                    perror("connect TCP");
+                    close(sock);  // Fermer le socket en cas d'échec
+                }
+                
+            }
+            
+            else if (code == 4 && len == 1 + 2 + 2 + 16 ) {  // CODE 4 : réponse si enchère active
+                printf("Réponse de liaison reçue (CODE 4).\n");
+            
+                // Extraire les champs
+                uint16_t id = (buffer[1] << 8) | buffer[2];
+                uint16_t port_tcp = (buffer[3] << 8) | buffer[4];
+                struct in6_addr ip_recue;
+                memcpy(&ip_recue, &buffer[5], 16);
+            
+                char ip_str[INET6_ADDRSTRLEN];
+                if (inet_ntop(AF_INET6, &ip_recue, ip_str, sizeof(ip_str)) == NULL) {
+                    perror("inet_ntop");
+                    return NULL;
+                }
+            
+                printf("Pair découvert : ID=%u, IP=%s, Port TCP=%u\n", id, ip_str, port_tcp);
+            
+                // Optionnel : enregistrer ce pair dans une liste
+                // ou lancer une connexion TCP avec lui ici
+                continue;
+            }
+
+            // Traitement texte normal
             printf("%s", buffer);
             fflush(stdout);
 
             if (strncmp(buffer, "[VALIDATION]", 12) == 0) {
-                // Extraire le message et la signature
                 char *msg = strchr(buffer, ' ') + 1;
                 char *sig_str = strchr(msg, ' ') + 1;
                 unsigned char sig[EVP_PKEY_size(my_privkey)];
@@ -87,7 +158,6 @@ void *peer_receiver(void *arg){
                     sscanf(sig_str + 2 * i, "%2hhx", &sig[i]);
                 }
 
-                // Vérifier la signature avec la clé publique du pair
                 EVP_PKEY *peer_pubkey = get_peer_pubkey(nom);
                 if (peer_pubkey && verify_message(peer_pubkey, (unsigned char *)msg, strlen(msg), sig, siglen)) {
                     printf("Message validé par %s\n", nom);
@@ -99,6 +169,8 @@ void *peer_receiver(void *arg){
     }
     return NULL;
 }
+
+
 
 // Démarrage du pair
 void peer_start(const char *nom, const char *interface){
@@ -112,8 +184,6 @@ void peer_start(const char *nom, const char *interface){
     char ipv6_perso[INET6_ADDRSTRLEN];
     snprintf(ipv6_perso, sizeof(ipv6_perso), "fe80::%x", iface_index);
     generer_id_peer(nom, ipv6_perso);
-    creer_adresse_perso(PORT, PORT + 1, iface_index); 
-
 
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sock < 0){
@@ -145,6 +215,13 @@ void peer_start(const char *nom, const char *interface){
 
     signal(SIGINT, handle_sigint);
 
+    // socket TCP
+    socket_tcp = create_tcp_socket_serveur();
+    if (socket_tcp < 0) {
+        fprintf(stderr, "Erreur lors de la création du socket TCP.\n");
+        exit(EXIT_FAILURE);
+    }
+
 
     // Notifier les autres de la connexion
     char join_msg[BUF_SIZE];
@@ -163,6 +240,7 @@ void peer_start(const char *nom, const char *interface){
     pthread_t tid;
     pthread_create(&tid, NULL, peer_receiver, &sock);
 
+
     // Envoi des messages
     char buffer[BUF_SIZE];
     while (fgets(buffer, sizeof(buffer), stdin)){
@@ -171,11 +249,17 @@ void peer_start(const char *nom, const char *interface){
             creer_enchere();
         }
 
-        else if (strncmp(buffer, "rejoindre ", 10) == 0) {
-            char auction_groupe[INET6_ADDRSTRLEN];
-            char auction_id[64];
-            if (sscanf(buffer + 10, "%s %s", auction_id, auction_groupe) == 2) {
-                join_enchere(auction_id, auction_groupe);
+        else if (strcmp(buffer, "join\n") == 0) {
+            // char auction_groupe[INET6_ADDRSTRLEN];
+            // char auction_id[64];
+            // if (sscanf(buffer + 10, "%s %s", auction_id, auction_groupe) == 2) {
+            //     join_enchere(auction_id, auction_groupe);
+            // }
+
+            if (msg_join_enchere() == -1) {
+                printf("Erreur lors de l'envoi de la demande de rejoindre l'enchère.\n");
+            } else {
+                printf("Demande de rejoindre un système d’enchères envoyée (CODE 3).\n");
             }
         }
         
@@ -186,7 +270,7 @@ void peer_start(const char *nom, const char *interface){
                 fprintf(stderr, "Erreur : le message est trop long pour le tampon.\n");
             }
             
-                printf("enchere active : %d\n", enchere_active);
+                // printf("enchere  : %d\n", nb_encheres);
                 if (enchere_active >= 0) {
                 struct sockaddr_in6 dest = {0};
                 dest.sin6_family = AF_INET6;
@@ -212,7 +296,7 @@ void peer_start(const char *nom, const char *interface){
     }
 
     close(sock);
-
+    close(socket_tcp);
 }
 
 
@@ -238,15 +322,68 @@ void generer_id_peer(const char *nom, char *ipv6_perso) {
 }
 
 
-void creer_adresse_perso(int port_udp, int port_tcp, int iface_index) {
-    char ipv6_str[INET6_ADDRSTRLEN];
-    snprintf(ipv6_str, sizeof(ipv6_str), "fe80::%x", iface_index);  // adresse lien-local fictive
 
-    if (inet_pton(AF_INET6, ipv6_str, &mon_adresse_perso.addr) != 1) {
-        perror("inet_pton");
-        exit(EXIT_FAILURE);
+// ------------------- TCP ------------------------------------------
+
+int generate_random_port() {
+    // Initialiser le générateur de nombres aléatoires
+    srand(time(NULL));  
+    int MIN_PORT = 1024; // Port minimum
+    int MAX_PORT = 65535; // Port maximum
+    
+    // Générer un port aléatoire entre MIN_PORT et MAX_PORT
+    return (rand() % (MAX_PORT - MIN_PORT + 1)) + MIN_PORT;
+}
+
+int create_tcp_socket_serveur() {
+    int sock = socket(AF_INET6, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("socket TCP");
+        return -1;
     }
 
-    mon_adresse_perso.port_udp = port_udp;
-    mon_adresse_perso.port_tcp = port_tcp;
+    port_tcp = generate_random_port();
+
+    struct sockaddr_in6 addr = {0};
+    addr.sin6_family = AF_INET6;
+    addr.sin6_port = htons(port_tcp); 
+    addr.sin6_addr = in6addr_any;
+
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        perror("bind TCP");
+        close(sock);
+        return -1;
+    }
+
+    if (listen(sock, 5) < 0) {
+        perror("listen TCP");
+        close(sock);
+        return -1;
+    }
+
+    return sock;
 }
+
+int create_tcp_socket_client(const char *ip_dest, int port_dest) {
+    int sock = socket(AF_INET6, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("socket TCP");
+        return -1;
+    }
+
+    struct sockaddr_in6 dest = {0};
+    dest.sin6_family = AF_INET6;
+    inet_pton(AF_INET6, ip_dest, &dest.sin6_addr);
+    dest.sin6_port = htons(port_dest);
+
+    if (connect(sock, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+        perror("connect TCP");
+        close(sock);
+        return -1;
+    }
+
+    return sock;
+}
+
+
+

@@ -26,12 +26,6 @@ typedef struct {
     EVP_PKEY *pubkey;
 } Peer;
 
-typedef struct {
-    struct in6_addr addr;
-    uint16_t port_udp;
-    uint16_t port_tcp;
-} AdressePerso;
-
 
 // Global variables for private and public keys
 extern EVP_PKEY *my_privkey;
@@ -46,6 +40,9 @@ extern int global_sock; // Socket global
 extern char nom[100]; // Nom du pair
 extern int global_iface_index; // Index de l'interface réseau
 
+extern int socket_tcp; // Socket TCP pour la connexion
+extern int port_tcp; // Port TCP pour la connexion
+
 
 
 // Fonctions principales
@@ -56,6 +53,9 @@ void *peer_receiver(void *arg);
 void handle_sigint(int sig);
 
 void generer_id_peer(const char *nom, char *ipv6_perso);
-void creer_adresse_perso(int port_udp, int port_tcp, int iface_index);
+
+
+int create_tcp_socket_serveur();
+int create_tcp_socket_client(const char *ip_dest, int port_dest);
 
 #endif // PEER_H

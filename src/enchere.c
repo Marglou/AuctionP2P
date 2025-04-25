@@ -6,11 +6,15 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <asm-generic/socket.h>
+#include <arpa/inet.h>
+#include <sys/select.h>
+#include <netinet/in.h>
+#include <net/if.h>
+
 
 #include "../include/enchere.h"
 #include "../include/superviseur.h"
 #include "../include/peer.h"
-#include <sys/select.h>
 
 
 void join_enchere(const char *id, const char *group){
@@ -110,30 +114,196 @@ void creer_enchere()
     int r = rand() & 0xFFFF; // max 4 chiffres hexadécimaux
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", r);
     
-    // Envoi du message NEW_AUCTION à tous les pairs
+    // // Envoi du message NEW_AUCTION à tous les pairs
+    // struct sockaddr_in6 dest = {0};
+    // dest.sin6_family = AF_INET6;
+    // dest.sin6_port = htons(PORT);
+    // if (inet_pton(AF_INET6, GROUP, &dest.sin6_addr) != 1) {
+    //     perror("inet_pton (liaison group)");
+    //     exit(EXIT_FAILURE);
+    // }
+    // dest.sin6_scope_id = global_iface_index;
+
+    // char msg[BUF_SIZE];
+    // snprintf(msg, sizeof(msg), "[NEW_AUCTION] ID=%s GROUPE=%s\n", auction_id, auction_group);
+
+    // // On utilise le socket global pour l’annonce
+    // if (sendto(global_sock, msg, strlen(msg), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+    //     perror("sendto");
+    // }
+
+    // Pour l'instant on considère que la personne qui lance l'enchère la rejoint en même temps
+    join_enchere(auction_id, auction_group);
+
+    // printf("Vous avez lancé et rejoint une nouvelle enchère : %s (%s)\n", auction_id, auction_group);
+    cpt++ ; // Incrémente le compteur d'enchères initiées
+}
+
+
+int handle_incoming_connections(char *ip_dest, uint16_t *port_dest) {
+    struct sockaddr_in6 client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+
+
+    int client_sock = accept(socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
+    if (client_sock < 0) {
+        perror("accept TCP");
+        return -1;
+    }
+
+    // Convertir l'adresse IP en chaîne lisible
+    inet_ntop(AF_INET6, &client_addr.sin6_addr, ip_dest, INET6_ADDRSTRLEN);
+    *port_dest = ntohs(client_addr.sin6_port);
+
+    // Réception du message
+    char buffer[BUF_SIZE];
+    ssize_t len = recv(client_sock, buffer, BUF_SIZE - 1, 0);
+    if (len > 0) {
+        buffer[len] = '\0';
+        printf("Message reçu : %s\n", buffer);
+    }
+
+    close(client_sock);
+    return 0;
+}
+
+
+int msg_join_enchere() {
+    int timeout_sec = 3;
+    int max_attempts = 3;
+    int attempts = 0;
+    char msg[1] = {3}; // CODE 3 pour rejoindre un système d'enchère
+
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
     dest.sin6_port = htons(PORT);
-    if (inet_pton(AF_INET6, GROUP, &dest.sin6_addr) != 1) {
-        perror("inet_pton (liaison group)");
-        exit(EXIT_FAILURE);
-    }
+    inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
     dest.sin6_scope_id = global_iface_index;
 
-    char msg[BUF_SIZE];
-    snprintf(msg, sizeof(msg), "[NEW_AUCTION] ID=%s GROUPE=%s\n", auction_id, auction_group);
+    while (attempts < max_attempts) {
+        printf("En attente de réponse sur le socket TCP (tentative %d)...\n", attempts + 1);
 
-    // On utilise le socket global pour l’annonce
-    if (sendto(global_sock, msg, strlen(msg), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
-        perror("sendto");
+        uint8_t msg[1 + 2];  // code (1) + port TCP (2)
+        msg[0] = 3;
+
+        uint16_t port_tcp_tmp = htons(port_tcp);  // Ton port TCP d'écoute
+        memcpy(&msg[1], &port_tcp_tmp, 2);
+
+        // Multidiffusion UDP vers les autres pairs
+        sendto(global_sock, msg, sizeof(msg), 0, (struct sockaddr *)&dest, sizeof(dest));
+
+        // Préparation pour select()
+        fd_set readfds;
+        struct timeval timeout;
+        FD_ZERO(&readfds);
+        FD_SET(socket_tcp, &readfds);
+        timeout.tv_sec = timeout_sec;
+        timeout.tv_usec = 0;
+
+        int ret = select(socket_tcp + 1, &readfds, NULL, NULL, &timeout);
+        if (ret > 0) {
+            // Connexion entrante détectée
+            // char ip_dest[INET6_ADDRSTRLEN];
+            // uint16_t port_dest;
+            // if (handle_incoming_connections(ip_dest, &port_dest) == 0) {
+            //     return 0;
+            // }
+
+            // Répondre à la demande de connexion
+            struct sockaddr_in6 client_addr;
+            socklen_t addr_len = sizeof(client_addr);
+            int client_sock = accept(socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
+            if (client_sock < 0) {
+                perror("accept TCP");
+                return -1;
+            }
+
+            // si le message reçu est de type 4
+            char buffer[BUF_SIZE];
+            ssize_t len = recv(socket_tcp, buffer, BUF_SIZE - 1, 0);
+            if (len > 0) {
+                buffer[len] = '\0';
+                uint8_t code = (uint8_t)buffer[0];
+                if (code == 4) { // CODE 4 : réponse si enchère active
+                    printf("Réponse reçue : %s\n", buffer);
+                    return 0;
+                } else {
+                    printf("Message reçu avec un code différent de 4 : %s\n", buffer);
+                }
+            } else {
+                perror("recv");
+                return -1;
+            }
+
+        } else if (ret == 0) {
+            printf("Pas de réponse reçue, tentative %d.\n", attempts + 1);
+        } else {
+            perror("select");
+            return -1;
+        }
+
+        attempts++;
     }
 
-    // Le créateur rejoint lui-même l’enchère
-    join_enchere(auction_id, auction_group);
-
-    printf("Vous avez lancé et rejoint une nouvelle enchère : %s (%s)\n", auction_id, auction_group);
-    cpt++ ; // Incrémente le compteur d'enchères initiées
+    printf("Aucune réponse reçue après %d tentatives. Création d'un nouveau système d'enchères.\n", max_attempts);
+    creer_enchere();
+    return -1;
 }
+
+
+
+void repondre_demande_liaison(int socket_udp, struct sockaddr_in6 *peer_addr, uint16_t id_local, int socket_tcp, struct in6_addr ip_perso) {
+    unsigned char msg[1 + 2 + 16 + 2];  // CODE + ID + IP + PORT
+    size_t offset = 0;
+
+    // CODE = 4
+    msg[offset++] = 4;
+
+    // ID (2 octets en big-endian)
+    msg[offset++] = id_local >> 8;
+    msg[offset++] = id_local & 0xFF;
+
+    // IP (16 octets)
+    memcpy(msg + offset, &ip_perso, 16);
+    offset += 16;
+    
+    // PORT (2 octets en big-endian)
+    struct sockaddr_in6 addr_local;
+    socklen_t addrlen = sizeof(addr_local);
+    if (getsockname(socket_tcp, (struct sockaddr *)&addr_local, &addrlen) != 0) {
+        perror("getsockname");
+        return;
+    }
+    uint16_t port_tcp = ntohs(addr_local.sin6_port); 
+    msg[offset++] = port_tcp >> 8;
+    msg[offset++] = port_tcp & 0xFF;
+
+    // Création d'une nouvelle socket TCP pour répondre
+    int tcp_sock = socket(AF_INET6, SOCK_STREAM, 0);
+    if (tcp_sock < 0) {
+        perror("Erreur de création du socket TCP");
+        return;
+    }
+
+    // Connexion à l'adresse du pair avec les informations de peer_addr
+    if (connect(tcp_sock, (struct sockaddr *)peer_addr, sizeof(*peer_addr)) < 0) {
+        perror("Erreur de connexion TCP");
+        close(tcp_sock);
+        return;
+    }
+
+    // Envoi du message via la connexion TCP
+    ssize_t bytes_sent = send(tcp_sock, msg, offset, 0);
+    if (bytes_sent < 0) {
+        perror("Erreur d'envoi TCP");
+    } else {
+        printf("Réponse envoyée à un pair en TCP : CODE=4, ID=%u, PORT=%u\n", id_local, port_tcp);
+    }
+
+    // Fermeture du socket TCP après l'envoi
+    close(tcp_sock);
+}
+
 
 
 
