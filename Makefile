@@ -1,13 +1,12 @@
-# Compiler and flags
+# Variables
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread
-OUT_DIR = out
+CFLAGS = -Iinclude -I/opt/homebrew/opt/openssl@3/include -I/opt/homebrew/opt/libsodium/include
+LDFLAGS = -L/opt/homebrew/opt/openssl@3/lib -L/opt/homebrew/opt/libsodium/lib -lssl -lcrypto -lsodium
 SRC_DIR = src
-
-# Source and output files
+OUT_DIR = build
+BIN = enchere
 SRC = $(wildcard $(SRC_DIR)/*.c)
 OBJ = $(patsubst $(SRC_DIR)/%.c, $(OUT_DIR)/%.o, $(SRC))
-BIN = $(OUT_DIR)/auction
 
 # Ensure output directory exists
 $(OUT_DIR):
@@ -15,18 +14,18 @@ $(OUT_DIR):
 
 # Compile object files
 $(OUT_DIR)/%.o: $(SRC_DIR)/%.c | $(OUT_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@ -lssl -lcrypto
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link executable
 $(BIN): $(OBJ)
-	$(CC) $(CFLAGS) $^ -o $@ -lssl -lcrypto  # Add -lssl -lcrypto here
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Clean build files
 clean:
-	rm -rf $(OUT_DIR)
+	rm -rf $(OUT_DIR) $(BIN)
 
 # Run the program
 run: $(BIN)
-	./$(BIN)
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib ./$(BIN)
 
 .PHONY: clean run
