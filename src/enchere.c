@@ -15,6 +15,7 @@
 #include "../include/enchere.h"
 #include "../include/superviseur.h"
 #include "../include/peer.h"
+#include "../include/message.h"
 
 
 void join_enchere(const char *id, const char *group){
@@ -225,9 +226,25 @@ int msg_join_enchere() {
                 buffer[len] = '\0';
                 uint8_t code = (uint8_t)buffer[0];
                 if (code == 4) { // CODE 4 : réponse si enchère active
-                    printf("Réponse reçue : %s\n", buffer);
+                    printf("Réponse reçue\n");
+                    
+                    struct message parsed_msg;  // Structure pour contenir le message parsé
+                
+                    // Appel de la fonction de parsing
+                    if (parse_message((uint8_t *)buffer, len, &parsed_msg) == 0) {
+                        // Si le message a été parsé avec succès, on peut traiter les informations
+                        printf("Message traité : ID=%u, IP=%s, PORT=%u\n", parsed_msg.id,
+                               inet_ntop(AF_INET6, &parsed_msg.ip, buffer, sizeof(buffer)),  // Conversion de l'adresse IP en chaîne de caractères
+                               ntohs(parsed_msg.port));  // Conversion du port en format hôte
+                    } else {
+                        // Si une erreur survient lors du parsing, on affiche un message d'erreur
+                        fprintf(stderr, "Erreur lors du traitement du message.\n");
+                    }
+                
+                    // Fermer la connexion après traitement
                     close(client_sock);
                     return 0;
+                
                 } else {
                     printf("Message reçu avec un code différent de 4 : %s\n", buffer);
                 }

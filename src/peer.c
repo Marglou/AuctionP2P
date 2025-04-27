@@ -13,6 +13,7 @@
 #include <openssl/sha.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
+#include <ifaddrs.h>
 
 
 #include "../include/peer.h"
@@ -113,11 +114,18 @@ void *peer_receiver(void *arg){
                 
                 // Connexion au serveur
                 if (connect(sock, (struct sockaddr *)&dest_tcp, sizeof(dest_tcp)) == 0) {
-                    // Si la connexion est réussie, envoyer une réponse
-                    char response[] = "Bienvenue dans le système !";
-                    send(sock, response, strlen(response), 0);
+                   // Si la connexion est réussie, envoyer le message CODE 4
+                    uint8_t msg[21];  // 1 + 2 + 16 + 2 = 21 octets
+                    if (msg_4(msg, id_peer, port_tcp) != 0) {
+                        fprintf(stderr, "Erreur lors de la construction du message.\n");
+                        return NULL;
+                    }
+
+                    // Envoi
+                    send(sock, msg, sizeof(msg), 0);
                     printf("Réponse envoyée\n");
                     close(sock);  // Fermer le socket après l'envoi
+
                 } else {
                     perror("connect TCP");
                     close(sock);  // Fermer le socket en cas d'échec
@@ -395,4 +403,29 @@ int create_tcp_socket_client(const char *ip_dest, int port_dest) {
 }
 
 
+int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index) {
+    struct ifaddrs *ifaddr, *ifa;
+    
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return -1;
+    }
 
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET6)
+            continue;
+
+        struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+
+        // Vérifie que c'est la bonne interface par son index
+        if (if_nametoindex(ifa->ifa_name) == iface_index) {
+            memcpy(addr, &sin6->sin6_addr, sizeof(struct in6_addr));
+            freeifaddrs(ifaddr);
+            return 0;
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    fprintf(stderr, "Adresse perso non trouvée pour index %u\n", iface_index);
+    return -1;
+}
