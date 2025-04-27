@@ -24,6 +24,8 @@
 #define BUF_SIZE 1024
 
 #define PORT_ENCHERE 12366
+#define PORT_TCP 12345  // Port fixe que le serveur écoute
+
 
 EnchereSocket encheres[MAX_ENCHERES];
 int nb_encheres = 0;    // Nombre d'enchères rejointes
@@ -93,7 +95,7 @@ void *peer_receiver(void *arg){
                 // Création de la structure sockaddr_in6 pour la connexion TCP
                 struct sockaddr_in6 dest_tcp = {0};
                 dest_tcp.sin6_family = AF_INET6;
-                dest_tcp.sin6_port = htons(port_tcp_dest);  // Utiliser le port du serveur
+                dest_tcp.sin6_port = htons(ntohs(port_tcp_dest));  // Utiliser le port du serveur
                 dest_tcp.sin6_addr = src.sin6_addr;  // Utiliser l'adresse IP du pair
                 
                 printf("Demande de liaison reçue (CODE 3) : %s:%u\n", ip_str, ntohs(port_tcp_dest));
@@ -106,7 +108,7 @@ void *peer_receiver(void *arg){
                 int sock = socket(AF_INET6, SOCK_STREAM, 0);
                 if (sock < 0) {
                     perror("socket");
-                    return -1;
+                    return NULL;
                 }
                 
                 // Connexion au serveur
@@ -336,7 +338,7 @@ int generate_random_port() {
 }
 
 int create_tcp_socket_serveur() {
-    int sock = socket(AF_INET6, SOCK_STREAM, 0);
+    int sock = socket(PF_INET6, SOCK_STREAM, 0);
     if (sock < 0) {
         perror("socket TCP");
         return -1;
@@ -348,6 +350,10 @@ int create_tcp_socket_serveur() {
     addr.sin6_family = AF_INET6;
     addr.sin6_port = htons(port_tcp); 
     addr.sin6_addr = in6addr_any;
+
+    if (IN6_IS_ADDR_LINKLOCAL(&addr.sin6_addr)) {
+        addr.sin6_scope_id = global_iface_index;
+    }
 
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("bind TCP");
@@ -365,7 +371,7 @@ int create_tcp_socket_serveur() {
 }
 
 int create_tcp_socket_client(const char *ip_dest, int port_dest) {
-    int sock = socket(AF_INET6, SOCK_STREAM, 0);
+    int sock = socket(PF_INET6, SOCK_STREAM, 0);
     if (sock < 0) {
         perror("socket TCP");
         return -1;
@@ -375,6 +381,9 @@ int create_tcp_socket_client(const char *ip_dest, int port_dest) {
     dest.sin6_family = AF_INET6;
     inet_pton(AF_INET6, ip_dest, &dest.sin6_addr);
     dest.sin6_port = htons(port_dest);
+    if (IN6_IS_ADDR_LINKLOCAL(&dest.sin6_addr)) {
+        dest.sin6_scope_id = global_iface_index;
+    }
 
     if (connect(sock, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
         perror("connect TCP");

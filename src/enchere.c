@@ -220,16 +220,18 @@ int msg_join_enchere() {
 
             // si le message reçu est de type 4
             char buffer[BUF_SIZE];
-            ssize_t len = recv(socket_tcp, buffer, BUF_SIZE - 1, 0);
+            ssize_t len = recv(client_sock, buffer, BUF_SIZE - 1, 0);
             if (len > 0) {
                 buffer[len] = '\0';
                 uint8_t code = (uint8_t)buffer[0];
                 if (code == 4) { // CODE 4 : réponse si enchère active
                     printf("Réponse reçue : %s\n", buffer);
+                    close(client_sock);
                     return 0;
                 } else {
                     printf("Message reçu avec un code différent de 4 : %s\n", buffer);
                 }
+                close(client_sock);
             } else {
                 perror("recv");
                 return -1;
@@ -303,9 +305,6 @@ void repondre_demande_liaison(int socket_udp, struct sockaddr_in6 *peer_addr, ui
     // Fermeture du socket TCP après l'envoi
     close(tcp_sock);
 }
-
-
-
 
 // Thread pour recevoir les messages du groupe d'enchères
 void *auction_receiver(void *arg){
