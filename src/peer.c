@@ -15,17 +15,9 @@
 #include <openssl/err.h>
 #include <ifaddrs.h>
 
-
 #include "../include/peer.h"
 #include "../include/superviseur.h"
 #include "../include/enchere.h"
-
-#define PORT 12365
-#define GROUP "ff15::abcd"
-#define BUF_SIZE 1024
-
-#define PORT_ENCHERE 12366
-#define PORT_TCP 12345  // Port fixe que le serveur écoute
 
 
 EnchereSocket encheres[MAX_ENCHERES];
@@ -40,6 +32,9 @@ int global_iface_index = 0;
 
 int socket_tcp = -1; // Socket TCP pour la connexion
 int port_tcp = -1; // Port TCP pour la connexion
+
+struct peer_info discovered_peers[MAX_PEERS];
+size_t num_peers = 0;
 
 // Gestion de la déconnexion propre avec Ctrl+C
 void handle_sigint(int sig)
@@ -101,7 +96,7 @@ void *peer_receiver(void *arg){
                 
                 printf("Demande de liaison reçue (CODE 3) : %s:%u\n", ip_str, ntohs(port_tcp_dest));
                 if (IN6_IS_ADDR_LINKLOCAL(&src.sin6_addr)) {
-                    printf("Adresse link-local détectée.\n");
+                    // printf("Adresse link-local détectée.\n");
                     dest_tcp.sin6_scope_id = global_iface_index;  // Spécifier l'index de l'interface
                 }
 
@@ -134,24 +129,7 @@ void *peer_receiver(void *arg){
             }
             
             else if (code == 4 && len == 1 + 2 + 2 + 16 ) {  // CODE 4 : réponse si enchère active
-                printf("Réponse de liaison reçue (CODE 4).\n");
-            
-                // Extraire les champs
-                uint16_t id = (buffer[1] << 8) | buffer[2];
-                uint16_t port_tcp = (buffer[3] << 8) | buffer[4];
-                struct in6_addr ip_recue;
-                memcpy(&ip_recue, &buffer[5], 16);
-            
-                char ip_str[INET6_ADDRSTRLEN];
-                if (inet_ntop(AF_INET6, &ip_recue, ip_str, sizeof(ip_str)) == NULL) {
-                    perror("inet_ntop");
-                    return NULL;
-                }
-            
-                printf("Pair découvert : ID=%u, IP=%s, Port TCP=%u\n", id, ip_str, port_tcp);
-            
-                // Optionnel : enregistrer ce pair dans une liste
-                // ou lancer une connexion TCP avec lui ici
+
                 continue;
             }
 
@@ -308,8 +286,6 @@ void peer_start(const char *nom, const char *interface){
     close(sock);
     close(socket_tcp);
 }
-
-
 
 
 void generer_id_peer(const char *nom, char *ipv6_perso) {

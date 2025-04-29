@@ -84,20 +84,29 @@ typedef struct {
 
 
 // Déclaration des structures pour la récupération des champs
-struct message {
+// Structure unique pour tous les messages
+struct message_4 {
     uint8_t code;
     uint16_t id;
     struct in6_addr ip;
     uint16_t port;
-    char mess[256];  // Message optionnel
-    char sig[256];   // Signature optionnelle
-    uint32_t numv;   // Numéro de vente optionnel
-    uint32_t prix;   // Prix optionnel
+};
+
+struct message_5 {
+    uint8_t code;
+    uint16_t id;
+    struct in6_addr ip;
+    uint16_t port;
+    unsigned char public_key[crypto_sign_PUBLICKEYBYTES]; // 32 octets
 };
 
 // Prototypes de fonctions
 int msg_4 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp);
-int parse_message(uint8_t *msg, size_t msg_len, struct message *msg_struct);
+int parse_msg_4 (uint8_t *msg, size_t msg_len, struct message_4 *msg_struct);
+
+int msg_5 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, unsigned char *public_key);
+int parse_msg_5 (uint8_t *msg, size_t msg_len, struct message_5 *msg_struct);
+
 
 void envoyer_message(int socket, uint16_t id);
 void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix);

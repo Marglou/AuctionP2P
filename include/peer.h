@@ -14,6 +14,8 @@
 #define GROUP_ENCHERE "ff15::efgh"
 
 #define MAX_ENCHERES 5
+#define MAX_PEERS 5
+
 
 typedef struct {
     int sock;
@@ -25,6 +27,13 @@ typedef struct {
     char name[100];
     EVP_PKEY *pubkey;
 } Peer;
+
+// Structure pour stocker les informations d'un pair
+struct peer_info {
+    uint16_t id;
+    struct in6_addr ip;
+    uint16_t port_tcp;
+};
 
 
 // Global variables for private and public keys
@@ -43,6 +52,8 @@ extern int global_iface_index; // Index de l'interface réseau
 extern int socket_tcp; // Socket TCP pour la connexion
 extern int port_tcp; // Port TCP pour la connexion
 
+extern struct peer_info discovered_peers[MAX_PEERS]; // Liste des pairs découverts
+extern size_t num_peers; // Nombre de pairs découverts
 
 
 // Fonctions principales
