@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <openssl/evp.h>
+#include <stdbool.h>
 
 #define PORT 12365
 #define GROUP "ff15::abcd"
@@ -27,6 +28,15 @@ typedef struct {
     char name[100];
     EVP_PKEY *pubkey;
 } Peer;
+
+// Structure for the peer list
+struct peer {
+    uint16_t id;
+    struct in6_addr ip;
+    uint16_t port_tcp;
+    unsigned char cle[113];
+    struct peer *next;
+};
 
 // Structure pour stocker les informations d'un pair
 struct peer_info {
@@ -66,8 +76,11 @@ void handle_sigint(int sig);
 
 void generer_id_peer(const char *nom, char *ipv6_perso);
 
-
 int create_tcp_socket_serveur();
 int create_tcp_socket_client(const char *ip_dest, int port_dest);
+
+// Peer management functions
+int find_peer_id(struct peer *p, uint16_t *id, bool find_free);
+int add_peer(struct peer *p, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle);
 
 #endif // PEER_H

@@ -10,7 +10,9 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 #include <net/if.h>
-
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
 #include "../include/connexion.h"
 #include "../include/peer.h"
 #include "../include/superviseur.h"
@@ -109,8 +111,19 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
         return -1;
     }
 
-    uint8_t msg[21 + crypto_sign_PUBLICKEYBYTES];
-    if (msg_5(msg, id_peer, port_tcp, my_pubkey) != 0) {
+    // Send message 5
+    uint8_t msg[1 + 2 + 16 + 2 + 113];  // CODE + ID + IP + PORT + CLE
+    unsigned char cle[113];
+    if (format_ed25519_public_key(cle, my_pubkey) != 0) {
+        printf("Erreur lors du formatage de la clé publique.\n");
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        close(socket_tcp_client);
+        return -1;
+    }
+
+    uint16_t peer_id = atoi(id_peer);
+    if (msg_5(msg, peer_id, port_tcp, cle) != 0) {
         printf("Erreur lors de la construction du message.\n");
         SSL_free(ssl);
         SSL_CTX_free(ctx);
@@ -120,12 +133,41 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
 
     SSL_write(ssl, msg, sizeof(msg));
 
-    char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
-    printf("Message 5 envoyé : ID=%u, IP=%s, PORT=%u\n", id_peer, ip_str, port);
+    printf("Message 5 envoyé : ID=%s, IP=%s, PORT=%u\n", id_peer, ip_str, port);
 
-    close(socket_tcp_client);
-    SSL_free(ssl);
-    SSL_CTX_free(ctx);
-    return 0;
+    // Wait for response (message 50 or 51)
+    uint8_t response[3];
+    int bytes_read = SSL_read(ssl, response, sizeof(response));
+    if (bytes_read <= 0) {
+        printf("Erreur lors de la lecture de la réponse.\n");
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        close(socket_tcp_client);
+        return -1;
+    }
+
+    if (response[0] == 50) {
+        // Received message 50 - ID already taken, get new ID
+        struct message_50 msg_50;
+        if (parse_msg_50(response, bytes_read, &msg_50) == 0) {
+            printf("ID déjà pris. Nouvel ID reçu : %u\n", msg_50.id);
+            // Update peer's ID
+            snprintf(id_peer, sizeof(id_peer), "%u", msg_50.id);
+        }
+    } else if (response[0] == 51) {
+        // Received message 51 - ID accepted
+        struct message_51 msg_51;
+        if (parse_msg_51(response, bytes_read, &msg_51) == 0) {
+            printf("ID accepté : %u\n", msg_51.id);
+        }
+    } else {
+        printf("Message de réponse inattendu : %u\n", response[0]);
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        close(socket_tcp_client);
+        return -1;
+    }
+
+    return socket_tcp_client;
 }

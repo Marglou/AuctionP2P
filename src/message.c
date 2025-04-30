@@ -66,7 +66,6 @@ int parse_msg_4 (uint8_t *msg, size_t msg_len, struct message_4 *msg_struct) {
     return 0;
 }
 
-// -----------------------------------------------------------------------------------------
 
 // --------------------------- CODE 5 -----------------------------------------------
 
@@ -113,15 +112,48 @@ int parse_msg_5(uint8_t *msg, size_t msg_len, struct message_5 *msg_struct) {
     msg_struct->port = (msg[offset] << 8) | msg[offset + 1];
     offset += 2;
 
-    memcpy(msg_struct->public_key, msg + offset, crypto_sign_PUBLICKEYBYTES);
-    offset += crypto_sign_PUBLICKEYBYTES;
+    memcpy(msg_struct->cle, msg + offset, 113);
+    offset += 113;
 
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 
+// --------------------------- CODE 50 -----------------------------------------------
+int msg_50(uint8_t *msg, uint16_t new_id) {
+    msg[0] = 50;  // CODE = 50
+    msg[1] = (new_id >> 8) & 0xFF;
+    msg[2] = new_id & 0xFF;
+    return 3;  // taille totale écrite
+}
 
+int parse_msg_50(uint8_t *msg, size_t msg_len, struct message_50 *msg_struct) {
+    if (msg_len < 3) return -1;  // message trop court
+
+    msg_struct->code = msg[0];
+    if (msg_struct->code != 50) return -1;
+
+    msg_struct->id = (msg[1] << 8) | msg[2];
+    return 0;
+}
+
+// --------------------------- CODE 51 -----------------------------------------------
+int msg_51(uint8_t *msg, uint16_t id) {
+    msg[0] = 51;  // CODE = 51
+    msg[1] = (id >> 8) & 0xFF;
+    msg[2] = id & 0xFF;
+    return 3;  // taille totale écrite
+}
+
+int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct) {
+    if (msg_len < 3) return -1;  // message trop court
+
+    msg_struct->code = msg[0];
+    if (msg_struct->code != 51) return -1;
+
+    msg_struct->id = (msg[1] << 8) | msg[2];
+    return 0;
+}
 
 void envoyer_message(int socket, uint16_t id) {
     QuitMessage msg;
@@ -136,7 +168,7 @@ void envoyer_message(int socket, uint16_t id) {
 void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
     RejetMessage msg;
     msg.CODE = code;         // 14 ou 15
-    //quand on fait apelle a la fonction on met 14 ou 15, CODE vaut 14 si l’enchère est rejetée car en concurrence avec une autre enchère et 15 sinon
+    //quand on fait apelle a la fonction on met 14 ou 15, CODE vaut 14 si l'enchère est rejetée car en concurrence avec une autre enchère et 15 sinon
     msg.ID = htons(id);      // Conversion en big-endian
     msg.NUMV = htonl(numv);  // Conversion en big-endian
     msg.PRIX = htonl(prix);  // Conversion en big-endian
@@ -221,4 +253,93 @@ void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix) {
     msg.NUMV = htonl(numv);
     msg.PRIX = htonl(prix);
     send(socket, &msg, sizeof(msg), 0);
+}
+
+// Format ED25519 public key with header and trailer texts
+int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey) {
+    // Header text: "-----BEGIN PUBLIC KEY-----\n"
+    const char *header = "-----BEGIN PUBLIC KEY-----\n";
+    memcpy(cle, header, strlen(header));
+    size_t offset = strlen(header);
+
+    // Get raw public key bytes
+    unsigned char raw_key[32];
+    size_t raw_len = sizeof(raw_key);
+    if (EVP_PKEY_get_raw_public_key(pubkey, raw_key, &raw_len) != 1) {
+        fprintf(stderr, "Error getting raw public key\n");
+        return -1;
+    }
+
+    // Base64 encode the raw key
+    char base64_key[45];
+    int base64_len = EVP_EncodeBlock((unsigned char *)base64_key, raw_key, raw_len);
+    if (base64_len < 0) {
+        fprintf(stderr, "Error base64 encoding public key\n");
+        return -1;
+    }
+
+    // Copy base64 encoded key
+    memcpy(cle + offset, base64_key, base64_len);
+    offset += base64_len;
+
+    // Trailer text: "\n-----END PUBLIC KEY-----\n"
+    const char *trailer = "\n-----END PUBLIC KEY-----\n";
+    memcpy(cle + offset, trailer, strlen(trailer));
+    offset += strlen(trailer);
+
+    // Ensure we have exactly 113 bytes
+    if (offset != 113) {
+        fprintf(stderr, "Error: formatted key length is %zu, expected 113\n", offset);
+        return -1;
+    }
+
+    return 0;
+}
+
+// --------------------------- CODE 6 -----------------------------------------------
+int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp, unsigned char *cle) {
+    size_t offset = 0;
+    msg[offset++] = 6;  // CODE = 6
+
+    // ID (big endian)
+    msg[offset++] = (id_peer >> 8) & 0xFF;
+    msg[offset++] = id_peer & 0xFF;
+
+    // IP (16 octets)
+    memcpy(msg + offset, &ip, 16);
+    offset += 16;
+
+    // PORT (big endian)
+    msg[offset++] = (port_tcp >> 8) & 0xFF;
+    msg[offset++] = port_tcp & 0xFF;
+
+    // CLE PUBLIQUE (113 octets)
+    memcpy(msg + offset, cle, 113);
+    offset += 113;
+
+    return offset;  // taille totale écrite
+}
+
+int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct) {
+    if (msg_len < 1 + 2 + 16 + 2 + 113)
+        return -1;  // message trop court
+
+    size_t offset = 0;
+
+    msg_struct->code = msg[offset++];
+    if (msg_struct->code != 6) return -1;
+
+    msg_struct->id = (msg[offset] << 8) | msg[offset + 1];
+    offset += 2;
+
+    memcpy(&msg_struct->ip, msg + offset, 16);
+    offset += 16;
+
+    msg_struct->port = (msg[offset] << 8) | msg[offset + 1];
+    offset += 2;
+
+    memcpy(msg_struct->cle, msg + offset, 113);
+    offset += 113;
+
+    return 0;
 }

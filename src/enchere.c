@@ -322,7 +322,7 @@ void recevoir_adressesPerso_TCP(int port_tcp, int timeout_sec)
         }
         else if (ready == 0)
         {
-            printf("⏱️ Timeout atteint, fin d'écoute TCP.\n");
+            printf("Timeout atteint, fin d'écoute TCP.\n");
             break;
         }
         else
@@ -335,7 +335,7 @@ void recevoir_adressesPerso_TCP(int port_tcp, int timeout_sec)
                 if (len > 0)
                 {
                     buffer[len] = '\0';
-                    printf("📨 Reçu adressePerso : %s\n", buffer);
+                    printf("Reçu adressePerso : %s\n", buffer);
                 }
                 close(client_sock);
             }

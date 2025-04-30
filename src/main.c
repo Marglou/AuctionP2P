@@ -16,8 +16,8 @@ EVP_PKEY *my_pubkey = NULL;
 void init_openssl()
 {
     SSL_library_init();           // Ancienne API, toujours utile pour compatibilité
-    // SSL_load_error_strings();    // Messages d’erreur
-    // OpenSSL_add_all_algorithms(); // Initialiser les algorithmes
+    SSL_load_error_strings();    // Messages d’erreur
+    OpenSSL_add_all_algorithms(); // Initialiser les algorithmes
     OPENSSL_init_ssl(0, NULL);    // Nouvelle API (facultative mais plus propre)
 }
 
@@ -54,8 +54,8 @@ int main() {
     register_peer(nom, my_pubkey);
 
     // peer_start(nom, "en0");  // Pour MAC
-    peer_start(nom, "eth0");  
-    // peer_start(nom, "enp0s3");
+    // peer_start(nom, "eth0");  
+    peer_start(nom, "enp0s3");
 
     cleanup_superviseur();
     EVP_PKEY_free(my_privkey);

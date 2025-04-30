@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>  // pour size_t
+#include <openssl/evp.h>
 
 #include <sodium.h>
 
@@ -93,11 +94,29 @@ struct message_4 {
 };
 
 struct message_5 {
-    uint8_t code;
-    uint16_t id;
-    struct in6_addr ip;
-    uint16_t port;
-    unsigned char public_key[crypto_sign_PUBLICKEYBYTES]; // 32 octets
+    uint8_t code;     // = 5
+    uint16_t id;      // ID du pair
+    struct in6_addr ip;  // Adresse IP (16 octets)
+    uint16_t port;    // Port TCP
+    unsigned char cle[113];  // Clé publique ED25519 (113 octets)
+};
+
+struct message_50 {
+    uint8_t code;     // = 50
+    uint16_t id;      // Nouvel ID assigné
+};
+
+struct message_51 {
+    uint8_t code;     // = 51
+    uint16_t id;      // ID accepté
+};
+
+struct message_6 {
+    uint8_t code;     // = 6
+    uint16_t id;      // ID du pair P
+    struct in6_addr ip;  // Adresse IP de P (16 octets)
+    uint16_t port;    // Port TCP de P
+    unsigned char cle[113];  // Clé publique ED25519 de P (113 octets)
 };
 
 // Prototypes de fonctions
@@ -107,6 +126,16 @@ int parse_msg_4 (uint8_t *msg, size_t msg_len, struct message_4 *msg_struct);
 int msg_5 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, unsigned char *public_key);
 int parse_msg_5 (uint8_t *msg, size_t msg_len, struct message_5 *msg_struct);
 
+int msg_50(uint8_t *msg, uint16_t new_id);
+int parse_msg_50(uint8_t *msg, size_t msg_len, struct message_50 *msg_struct);
+
+int msg_51(uint8_t *msg, uint16_t id);
+int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct);
+
+int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp, unsigned char *cle);
+int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct);
+
+int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
 
 void envoyer_message(int socket, uint16_t id);
 void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix);
