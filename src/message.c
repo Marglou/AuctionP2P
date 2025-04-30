@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h> // Pour htonl et htons
+#include <sodium.h>
 
 #include "../include/message.h"
 #include "../include/peer.h"
@@ -342,4 +343,100 @@ int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct) {
     offset += 113;
 
     return 0;
+}
+
+// --------------------------- CODE 7 -----------------------------------------------
+int msg_7(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix, 
+          const unsigned char *message, size_t message_len,
+          const unsigned char *signature, size_t sig_len) {
+    if (!msg || !message || !signature || message_len > 256 || sig_len != crypto_sign_BYTES)
+        return -1;
+
+    size_t offset = 0;
+    msg[offset++] = 7;  // CODE = 7
+
+    // ID (big endian)
+    msg[offset++] = (id >> 8) & 0xFF;
+    msg[offset++] = id & 0xFF;
+
+    // NUMV (big endian)
+    msg[offset++] = (numv >> 24) & 0xFF;
+    msg[offset++] = (numv >> 16) & 0xFF;
+    msg[offset++] = (numv >> 8) & 0xFF;
+    msg[offset++] = numv & 0xFF;
+
+    // PRIX (big endian)
+    msg[offset++] = (prix >> 24) & 0xFF;
+    msg[offset++] = (prix >> 16) & 0xFF;
+    msg[offset++] = (prix >> 8) & 0xFF;
+    msg[offset++] = prix & 0xFF;
+
+    // LMESS
+    msg[offset++] = (uint8_t)message_len;
+
+    // MESS
+    memcpy(msg + offset, message, message_len);
+    offset += message_len;
+
+    // LSIG
+    msg[offset++] = (uint8_t)sig_len;
+
+    // SIG
+    memcpy(msg + offset, signature, sig_len);
+    offset += sig_len;
+
+    return offset;  // taille totale écrite
+}
+
+int parse_msg_7(uint8_t *msg, size_t msg_len, EnchereMessage *msg_struct) {
+    if (!msg || !msg_struct || msg_len < 1 + 2 + 4 + 4 + 1 + 1 + crypto_sign_BYTES)
+        return -1;
+
+    size_t offset = 0;
+
+    msg_struct->code = msg[offset++];
+    if (msg_struct->code != 7) return -1;
+
+    // ID
+    msg_struct->id = (msg[offset] << 8) | msg[offset + 1];
+    offset += 2;
+
+    // NUMV
+    msg_struct->numv = (msg[offset] << 24) | (msg[offset + 1] << 16) | 
+                      (msg[offset + 2] << 8) | msg[offset + 3];
+    offset += 4;
+
+    // PRIX
+    msg_struct->prix = (msg[offset] << 24) | (msg[offset + 1] << 16) | 
+                      (msg[offset + 2] << 8) | msg[offset + 3];
+    offset += 4;
+
+    // LMESS
+    msg_struct->lmess = msg[offset++];
+
+    // MESS
+    if (msg_struct->lmess > 0) {
+        memcpy(msg_struct->message, msg + offset, msg_struct->lmess);
+    }
+    offset += msg_struct->lmess;
+
+    // LSIG
+    msg_struct->lsig = msg[offset++];
+    if (msg_struct->lsig != crypto_sign_BYTES) return -1;
+
+    // SIG
+    memcpy(msg_struct->signature, msg + offset, msg_struct->lsig);
+    offset += msg_struct->lsig;
+
+    return 0;
+}
+
+void envoyer_info_auction(int socket, uint16_t id, uint32_t numv, uint32_t prix, 
+                         const unsigned char *message, size_t message_len,
+                         const unsigned char *signature) {
+    uint8_t msg[1 + 2 + 4 + 4 + 1 + 256 + 1 + crypto_sign_BYTES]; // Maximum size
+    int msg_len = msg_7(msg, id, numv, prix, message, message_len, signature, crypto_sign_BYTES);
+    if (msg_len > 0) {
+        send(socket, msg, msg_len, 0);
+    }
 }

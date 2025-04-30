@@ -83,6 +83,16 @@ typedef struct {
     unsigned char public_key[crypto_sign_PUBLICKEYBYTES];  // 32 octets
 } PublicKeyMessage;
 
+typedef struct {
+    uint8_t code;                      // 7
+    uint16_t id;                       // ID du pair
+    uint32_t numv;                     // Numéro de vente
+    uint32_t prix;                     // Prix proposé
+    uint8_t lmess;                     // longueur du message signé
+    unsigned char message[256];        // message signé
+    uint8_t lsig;                      // longueur de la signature (toujours 64)
+    unsigned char signature[crypto_sign_BYTES];  // signature Ed25519 (64 octets)
+} EnchereMessage;
 
 // Déclaration des structures pour la récupération des champs
 // Structure unique pour tous les messages
@@ -144,5 +154,8 @@ void envoyer_finalisation_vente(int socket, bool etape, uint16_t id, uint32_t nu
 void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t numv, uint16_t *ids_disparus, uint16_t nb);
 void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix);
 void envoyer_validation_complet(int socket, uint16_t id, const unsigned char *message, size_t message_len, const unsigned char *private_key);
+void envoyer_info_auction(int socket, uint16_t id, uint32_t numv, uint32_t prix, 
+                         const unsigned char *message, size_t message_len,
+                         const unsigned char *signature);
 
 #endif // MESSAGE_H

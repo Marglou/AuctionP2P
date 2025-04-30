@@ -439,6 +439,30 @@ int connect_to_peers_and_send_info(struct peer *p, uint16_t new_peer_id, struct 
             continue;
         }
 
+        // If we're in an active auction, send auction information
+        if (enchere_active >= 0) {
+            // Create message content with auction info
+            char message[256];
+            snprintf(message, sizeof(message), "AUCTION_INFO %s %u", 
+                    encheres[enchere_active].id, encheres[enchere_active].sock);
+            
+            // Sign the message
+            unsigned char signature[crypto_sign_BYTES];
+            if (crypto_sign_detached(signature, NULL, 
+                                   (const unsigned char *)message, strlen(message),
+                                   my_privkey) != 0) {
+                fprintf(stderr, "Failed to sign auction info message\n");
+                close(sock);
+                current = current->next;
+                continue;
+            }
+
+            // Send auction information
+            envoyer_info_auction(sock, atoi(id_peer), cpt, 0, 
+                               (const unsigned char *)message, strlen(message),
+                               signature);
+        }
+
         // Read response
         uint8_t response[2];
         int bytes_read = recv(sock, response, 2, 0);
