@@ -51,6 +51,7 @@ extern int global_iface_index; // Index de l'interface réseau
 
 extern int socket_tcp; // Socket TCP pour la connexion
 extern int port_tcp; // Port TCP pour la connexion
+extern struct tcp_listener_state listener_tcp; // État du listener TCP
 
 extern struct peer_info discovered_peers[MAX_PEERS]; // Liste des pairs découverts
 extern size_t num_peers; // Nombre de pairs découverts

@@ -7,6 +7,20 @@
         "in.h": "c",
         "if.h": "c",
         "socket.h": "c",
-        "sha.h": "c"
+        "sha.h": "c",
+        "enchere.h": "c"
+    },
+    "github.copilot.enable": {
+        "*": true,
+        "plaintext": true,
+        "markdown": true,
+        "scminput": true,
+        "c": true,
+        "ocaml": false,
+        "r": true,
+        "latex": true,
+        "java": true,
+        "python": false,
+        "sql": true
     }
 }

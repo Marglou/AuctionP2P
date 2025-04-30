@@ -18,6 +18,8 @@
 #include "../include/peer.h"
 #include "../include/superviseur.h"
 #include "../include/enchere.h"
+#include "../include/message.h"
+#include "../include/connexion.h"
 
 
 EnchereSocket encheres[MAX_ENCHERES];
@@ -32,6 +34,7 @@ int global_iface_index = 0;
 
 int socket_tcp = -1; // Socket TCP pour la connexion
 int port_tcp = -1; // Port TCP pour la connexion
+struct tcp_listener_state listener_tcp = {0};
 
 struct peer_info discovered_peers[MAX_PEERS];
 size_t num_peers = 0;
@@ -94,9 +97,7 @@ void *peer_receiver(void *arg){
                 dest_tcp.sin6_port = htons(ntohs(port_tcp_dest));  // Utiliser le port du serveur
                 dest_tcp.sin6_addr = src.sin6_addr;  // Utiliser l'adresse IP du pair
                 
-                printf("Demande de liaison reçue (CODE 3) : %s:%u\n", ip_str, ntohs(port_tcp_dest));
                 if (IN6_IS_ADDR_LINKLOCAL(&src.sin6_addr)) {
-                    // printf("Adresse link-local détectée.\n");
                     dest_tcp.sin6_scope_id = global_iface_index;  // Spécifier l'index de l'interface
                 }
 
@@ -127,11 +128,7 @@ void *peer_receiver(void *arg){
                 }
                 
             }
-            
-            else if (code == 4 && len == 1 + 2 + 2 + 16 ) {  // CODE 4 : réponse si enchère active
 
-                continue;
-            }
 
             // Traitement texte normal
             printf("%s", buffer);
@@ -210,6 +207,15 @@ void peer_start(const char *nom, const char *interface){
         exit(EXIT_FAILURE);
     }
 
+    // État du listener TCP
+    listener_tcp.socket_tcp = socket_tcp;
+    listener_tcp.response_received = false;
+    listener_tcp.first_response_time = 0;
+    
+    pthread_t tcp_thread;
+    pthread_create(&tcp_thread, NULL, listen_tcp_thread, &listener_tcp);
+    
+
 
     // Notifier les autres de la connexion
     char join_msg[BUF_SIZE];
@@ -247,7 +253,8 @@ void peer_start(const char *nom, const char *interface){
             if (msg_join_enchere() == -1) {
                 printf("Erreur lors de l'envoi de la demande de rejoindre l'enchère.\n");
             } else {
-                printf("Demande de rejoindre un système d’enchères envoyée (CODE 3).\n");
+                // printf("Demande de rejoindre un système d’enchères envoyée (CODE 3).\n");
+
             }
         }
         
