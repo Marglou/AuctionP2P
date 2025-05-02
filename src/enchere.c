@@ -124,28 +124,37 @@ void creer_enchere()
     int r = rand() & 0xFFFF; // max 4 chiffres hexadécimaux
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", r);
 
-    // // Envoi du message NEW_AUCTION à tous les pairs
-    // struct sockaddr_in6 dest = {0};
-    // dest.sin6_family = AF_INET6;
-    // dest.sin6_port = htons(PORT);
-    // if (inet_pton(AF_INET6, GROUP, &dest.sin6_addr) != 1) {
-    //     perror("inet_pton (liaison group)");
-    //     exit(EXIT_FAILURE);
-    // }
-    // dest.sin6_scope_id = global_iface_index;
-
-    // char msg[BUF_SIZE];
-    // snprintf(msg, sizeof(msg), "[NEW_AUCTION] ID=%s GROUPE=%s\n", auction_id, auction_group);
-
-    // // On utilise le socket global pour l’annonce
-    // if (sendto(global_sock, msg, strlen(msg), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
-    //     perror("sendto");
-    // }
-
-    // Pour l'instant on considère que la personne qui lance l'enchère la rejoint en même temps
+    // Join the auction group first
     join_enchere(auction_id, auction_group);
 
-    // printf("Vous avez lancé et rejoint une nouvelle enchère : %s (%s)\n", auction_id, auction_group);
+    // Create and send message 8 (auction initiation)
+    uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
+    msg[0] = 8; // CODE = 8 for auction initiation
+    uint16_t peer_id = atoi(id_peer);
+    uint32_t numv = cpt + 1;
+    uint32_t initial_price = 0; // You can modify this to set an initial price
+
+    // Convert to network byte order
+    uint16_t id_net = htons(peer_id);
+    uint32_t numv_net = htonl(numv);
+    uint32_t prix_net = htonl(initial_price);
+
+    // Copy values to message
+    memcpy(&msg[1], &id_net, 2);
+    memcpy(&msg[3], &numv_net, 4);
+    memcpy(&msg[7], &prix_net, 4);
+
+    // Send the message to the auction group
+    struct sockaddr_in6 dest = {0};
+    dest.sin6_family = AF_INET6;
+    dest.sin6_port = htons(PORT_ENCHERE);
+    inet_pton(AF_INET6, auction_group, &dest.sin6_addr);
+    dest.sin6_scope_id = global_iface_index;
+
+    sendto(encheres[enchere_active].sock, msg, sizeof(msg), 0,
+           (struct sockaddr *)&dest, sizeof(dest));
+
+    printf("Enchère initiée : ID=%s, NUMV=%u, PRIX=%u\n", auction_id, numv, initial_price);
     cpt++; // Incrémente le compteur d'enchères initiées
 }
 
@@ -225,9 +234,6 @@ int msg_join_enchere()
     return -1;
 }
 
-
-
-
 // Thread pour recevoir les messages du groupe d'enchères
 void *auction_receiver(void *arg)
 {
@@ -246,8 +252,65 @@ void *auction_receiver(void *arg)
         if (len > 0)
         {
             buffer[len] = '\0';
-            printf("[Enchère] %s", buffer);
-            fflush(stdout);
+            
+            // Handle binary messages with codes
+            uint8_t code = (uint8_t)buffer[0];
+            
+            switch (code) {
+                case 8: { // Auction initiation
+                    uint16_t id = ntohs(*(uint16_t*)&buffer[1]);
+                    uint32_t numv = ntohl(*(uint32_t*)&buffer[3]);
+                    uint32_t prix = ntohl(*(uint32_t*)&buffer[7]);
+                    
+                    printf("[Enchère] Nouvelle enchère initiée par pair %u: NUMV=%u, PRIX=%u\n", 
+                           id, numv, prix);
+                    break;
+                }
+                
+                case 9: { // Bid message
+                    uint16_t id = ntohs(*(uint16_t*)&buffer[1]);
+                    uint32_t numv = ntohl(*(uint32_t*)&buffer[3]);
+                    uint32_t prix = ntohl(*(uint32_t*)&buffer[7]);
+                    
+                    printf("[Enchère] Nouvelle offre de pair %u: NUMV=%u, PRIX=%u\n", 
+                           id, numv, prix);
+                    
+                    // If we are the supervisor, relay the message with code 10
+                    if (enchere_active >= 0 && strcmp(encheres[enchere_active].id, id_peer) == 0) {
+                        uint8_t relay_msg[1 + 2 + 4 + 4];
+                        relay_msg[0] = 10; // Change code to 10
+                        memcpy(&relay_msg[1], &buffer[1], 10); // Copy ID, NUMV, and PRIX
+                        
+                        struct sockaddr_in6 dest = {0};
+                        dest.sin6_family = AF_INET6;
+                        dest.sin6_port = htons(PORT_ENCHERE);
+                        inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
+                        dest.sin6_scope_id = global_iface_index;
+                        
+                        sendto(sock, relay_msg, sizeof(relay_msg), 0,
+                               (struct sockaddr *)&dest, sizeof(dest));
+                        
+                        printf("[Superviseur] Relais de l'offre de pair %u\n", id);
+                    }
+                    break;
+                }
+                
+                case 10: { // Relayed bid message
+                    uint16_t id = ntohs(*(uint16_t*)&buffer[1]);
+                    uint32_t numv = ntohl(*(uint32_t*)&buffer[3]);
+                    uint32_t prix = ntohl(*(uint32_t*)&buffer[7]);
+                    
+                    printf("[Enchère] Offre validée de pair %u: NUMV=%u, PRIX=%u\n", 
+                           id, numv, prix);
+                    break;
+                }
+                
+                default:
+                    // Handle text messages
+                    printf("[Enchère] %s", buffer);
+                    fflush(stdout);
+                    break;
+            }
         }
     }
     return NULL;
@@ -343,4 +406,40 @@ void recevoir_adressesPerso_TCP(int port_tcp, int timeout_sec)
     }
 
     close(sock);
+}
+
+void faire_offre(uint32_t prix)
+{
+    if (enchere_active < 0) {
+        printf("Vous n'êtes pas dans une enchère active.\n");
+        return;
+    }
+
+    // Create bid message (code 9)
+    uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
+    msg[0] = 9; // CODE = 9 for bid
+    uint16_t peer_id = atoi(id_peer);
+    uint32_t numv = cpt; // Current auction number
+
+    // Convert to network byte order
+    uint16_t id_net = htons(peer_id);
+    uint32_t numv_net = htonl(numv);
+    uint32_t prix_net = htonl(prix);
+
+    // Copy values to message
+    memcpy(&msg[1], &id_net, 2);
+    memcpy(&msg[3], &numv_net, 4);
+    memcpy(&msg[7], &prix_net, 4);
+
+    // Send the bid message to the auction group
+    struct sockaddr_in6 dest = {0};
+    dest.sin6_family = AF_INET6;
+    dest.sin6_port = htons(PORT_ENCHERE);
+    inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
+    dest.sin6_scope_id = global_iface_index;
+
+    sendto(encheres[enchere_active].sock, msg, sizeof(msg), 0,
+           (struct sockaddr *)&dest, sizeof(dest));
+
+    printf("Offre envoyée : PRIX=%u\n", prix);
 }

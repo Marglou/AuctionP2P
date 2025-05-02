@@ -242,22 +242,19 @@ void peer_start(const char *nom, const char *interface){
         if (strcmp(buffer, "lancer\n") == 0){
             creer_enchere();
         }
-
         else if (strcmp(buffer, "join\n") == 0) {
-            // char auction_groupe[INET6_ADDRSTRLEN];
-            // char auction_id[64];
-            // if (sscanf(buffer + 10, "%s %s", auction_id, auction_groupe) == 2) {
-            //     join_enchere(auction_id, auction_groupe);
-            // }
-
             if (msg_join_enchere() == -1) {
                 printf("Erreur lors de l'envoi de la demande de rejoindre l'enchère.\n");
-            } else {
-                // printf("Demande de rejoindre un système d'enchères envoyée (CODE 3).\n");
-
             }
         }
-        
+        else if (strncmp(buffer, "offre ", 6) == 0) {
+            uint32_t prix;
+            if (sscanf(buffer + 6, "%u", &prix) == 1) {
+                faire_offre(prix);
+            } else {
+                printf("Format invalide. Utilisez: offre <prix>\n");
+            }
+        }
         else {
             char msg[BUF_SIZE];
             snprintf(msg, sizeof(msg), "[%s] %s", nom, buffer);
@@ -265,8 +262,7 @@ void peer_start(const char *nom, const char *interface){
                 fprintf(stderr, "Erreur : le message est trop long pour le tampon.\n");
             }
             
-                // printf("enchere  : %d\n", nb_encheres);
-                if (enchere_active >= 0) {
+            if (enchere_active >= 0) {
                 struct sockaddr_in6 dest = {0};
                 dest.sin6_family = AF_INET6;
                 dest.sin6_port = htons(PORT_ENCHERE);
@@ -275,7 +271,6 @@ void peer_start(const char *nom, const char *interface){
         
                 sendto(encheres[enchere_active].sock, msg, strlen(msg), 0,
                        (struct sockaddr *)&dest, sizeof(dest));
-
             } else {
                 struct sockaddr_in6 dest = {0};
                 dest.sin6_family = AF_INET6;
@@ -287,7 +282,6 @@ void peer_start(const char *nom, const char *interface){
                        (struct sockaddr *)&dest, sizeof(dest));
             }
         }
-        
     }
 
     close(sock);
