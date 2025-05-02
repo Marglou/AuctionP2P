@@ -6,10 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h> // Pour htonl et htons
-#include <sodium.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#include <openssl/pem.h>
 
 #include "../include/message.h"
 #include "../include/peer.h"
+#include "../include/superviseur.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -72,8 +75,6 @@ int parse_msg_4 (uint8_t *msg, size_t msg_len, struct message_4 *msg_struct) {
 
 int msg_5(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, unsigned char *public_key) {
     struct in6_addr ip;
-    // if (get_ip_perso(&ip) != 0) return -1; 
-
     size_t offset = 0;
     msg[offset++] = 5;  // CODE = 5
 
@@ -89,15 +90,15 @@ int msg_5(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, unsigned char *publ
     msg[offset++] = (port_tcp >> 8) & 0xFF;
     msg[offset++] = port_tcp & 0xFF;
 
-    // CLE PUBLIQUE (32 octets)
-    memcpy(msg + offset, public_key, crypto_sign_PUBLICKEYBYTES);
-    offset += crypto_sign_PUBLICKEYBYTES;
+    // CLE PUBLIQUE (113 octets)
+    memcpy(msg + offset, public_key, ED25519_KEY_WITH_HEADER_SIZE);
+    offset += ED25519_KEY_WITH_HEADER_SIZE;
 
     return offset;  // taille totale écrite
 }
 
 int parse_msg_5(uint8_t *msg, size_t msg_len, struct message_5 *msg_struct) {
-    if (msg_len < 1 + 2 + 16 + 2 + crypto_sign_PUBLICKEYBYTES)
+    if (msg_len < 1 + 2 + 16 + 2 + ED25519_KEY_WITH_HEADER_SIZE)
         return -1;  // message trop court
 
     size_t offset = 0;
@@ -113,8 +114,8 @@ int parse_msg_5(uint8_t *msg, size_t msg_len, struct message_5 *msg_struct) {
     msg_struct->port = (msg[offset] << 8) | msg[offset + 1];
     offset += 2;
 
-    memcpy(msg_struct->cle, msg + offset, 113);
-    offset += 113;
+    memcpy(msg_struct->cle, msg + offset, ED25519_KEY_WITH_HEADER_SIZE);
+    offset += ED25519_KEY_WITH_HEADER_SIZE;
 
     return 0;
 }
@@ -349,7 +350,7 @@ int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct) {
 int msg_7(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix, 
           const unsigned char *message, size_t message_len,
           const unsigned char *signature, size_t sig_len) {
-    if (!msg || !message || !signature || message_len > 256 || sig_len != crypto_sign_BYTES)
+    if (!msg || !message || !signature || message_len > 256 || sig_len != ED25519_SIGNATURE_SIZE)
         return -1;
 
     size_t offset = 0;
@@ -389,7 +390,7 @@ int msg_7(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix,
 }
 
 int parse_msg_7(uint8_t *msg, size_t msg_len, EnchereMessage *msg_struct) {
-    if (!msg || !msg_struct || msg_len < 1 + 2 + 4 + 4 + 1 + 1 + crypto_sign_BYTES)
+    if (!msg || !msg_struct || msg_len < 1 + 2 + 4 + 4 + 1 + 1 + ED25519_SIGNATURE_SIZE)
         return -1;
 
     size_t offset = 0;
@@ -422,7 +423,7 @@ int parse_msg_7(uint8_t *msg, size_t msg_len, EnchereMessage *msg_struct) {
 
     // LSIG
     msg_struct->lsig = msg[offset++];
-    if (msg_struct->lsig != crypto_sign_BYTES) return -1;
+    if (msg_struct->lsig != ED25519_SIGNATURE_SIZE) return -1;
 
     // SIG
     memcpy(msg_struct->signature, msg + offset, msg_struct->lsig);
@@ -434,8 +435,8 @@ int parse_msg_7(uint8_t *msg, size_t msg_len, EnchereMessage *msg_struct) {
 void envoyer_info_auction(int socket, uint16_t id, uint32_t numv, uint32_t prix, 
                          const unsigned char *message, size_t message_len,
                          const unsigned char *signature) {
-    uint8_t msg[1 + 2 + 4 + 4 + 1 + 256 + 1 + crypto_sign_BYTES]; // Maximum size
-    int msg_len = msg_7(msg, id, numv, prix, message, message_len, signature, crypto_sign_BYTES);
+    uint8_t msg[1 + 2 + 4 + 4 + 1 + 256 + 1 + ED25519_SIGNATURE_SIZE]; // Maximum size
+    int msg_len = msg_7(msg, id, numv, prix, message, message_len, signature, ED25519_SIGNATURE_SIZE);
     if (msg_len > 0) {
         send(socket, msg, msg_len, 0);
     }

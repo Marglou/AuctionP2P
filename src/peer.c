@@ -441,10 +441,10 @@ int connect_to_peers_and_send_info(struct peer *p, uint16_t new_peer_id, struct 
                     encheres[enchere_active].id, encheres[enchere_active].sock);
             
             // Sign the message
-            unsigned char signature[crypto_sign_BYTES];
-            if (crypto_sign_detached(signature, NULL, 
-                                   (const unsigned char *)message, strlen(message),
-                                   my_privkey) != 0) {
+            unsigned char signature[ED25519_SIGNATURE_SIZE];
+            size_t sig_len = ED25519_SIGNATURE_SIZE;
+            if (sign_message(my_privkey, (const unsigned char *)message, strlen(message),
+                           signature, &sig_len) != 0) {
                 fprintf(stderr, "Failed to sign auction info message\n");
                 close(sock);
                 current = current->next;
