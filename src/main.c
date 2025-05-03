@@ -30,7 +30,7 @@ int main() {
     fgets(nom, sizeof(nom), stdin);
     nom[strcspn(nom, "\n")] = '\0';
 
-    init_superviseur();
+    // init_superviseur();
     init_openssl();
 
     my_privkey = generate_ed25519_key();
@@ -54,8 +54,8 @@ int main() {
     register_peer(nom, my_pubkey);
 
     // peer_start(nom, "en0");  // Pour MAC
-    // peer_start(nom, "eth0");  
-    peer_start(nom, "enp0s3");
+    peer_start(nom, "eth0");  
+    // peer_start(nom, "enp0s3");
 
     cleanup_superviseur();
     EVP_PKEY_free(my_privkey);

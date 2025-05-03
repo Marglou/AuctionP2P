@@ -30,31 +30,35 @@ void *listen_tcp_thread(void *arg) {
         struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
 
         if (select(state->socket_tcp + 1, &readfds, NULL, NULL, &timeout) > 0) {
-            struct sockaddr_in6 client_addr;
-            socklen_t addr_len = sizeof(client_addr);
-            int client_sock = accept(state->socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
-            if (client_sock < 0) {
-                perror("accept");
-                continue;
-            }
 
-            uint8_t buffer[BUF_SIZE];
-            ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
-            if (len > 0 && buffer[0] == 4 && num_peers >= 0) {
-                struct message_4 parsed_msg;
-                if (parse_msg_4(buffer, len, &parsed_msg) == 0) {
-                    printf("Pair trouvé : ID=%u, port=%u\n", parsed_msg.id, ntohs(parsed_msg.port));
-                    discovered_peers[num_peers++] = (struct peer_info){
-                        .id = parsed_msg.id,
-                        .ip = parsed_msg.ip,
-                        .port_tcp = parsed_msg.port
-                    };
-                    state->response_received = true;
-                    state->first_response_time = time(NULL);
+            if (FD_ISSET(state->socket_tcp, &readfds)) {
+                    // Accept incoming connection
+                struct sockaddr_in6 client_addr;
+                socklen_t addr_len = sizeof(client_addr);
+                int client_sock = accept(state->socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
+                if (client_sock < 0) {
+                    perror("accept");
+                    continue;
                 }
-            }
 
-            close(client_sock);
+                uint8_t buffer[BUF_SIZE];
+                ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
+                if (len > 0 && buffer[0] == 4 && num_peers >= 0) {
+                    struct message_4 parsed_msg;
+                    if (parse_msg_4(buffer, len, &parsed_msg) == 0) {
+                        printf("Pair trouvé : ID=%u, port=%u\n", parsed_msg.id, ntohs(parsed_msg.port));
+                        discovered_peers[num_peers++] = (struct peer_info){
+                            .id = parsed_msg.id,
+                            .ip = parsed_msg.ip,
+                            .port_tcp = parsed_msg.port
+                        };
+                        state->response_received = true;
+                        state->first_response_time = time(NULL);
+                    }
+                }
+
+                close(client_sock);
+            }
         }
     }
 

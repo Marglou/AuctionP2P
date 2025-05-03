@@ -27,7 +27,8 @@ EnchereSocket encheres[MAX_ENCHERES];
 int nb_encheres = 0;    // Nombre d'enchères rejointes
 int enchere_active = -1; // Index dans encheres[]
 int cpt = 0 ; // Compteur pour les enchères qu'il a initié
-char id_peer[128]; // ID du pair
+// char id_peer[128]; // ID du pair
+int id_peer = -1;
 
 int global_sock = -1;
 char nom[100];
@@ -73,6 +74,7 @@ void *peer_receiver(void *arg){
     socklen_t srclen = sizeof(src);
 
     while (1){
+        memset(buffer, 0, BUF_SIZE);
         ssize_t len = recvfrom(sock, buffer, BUF_SIZE - 1, 0,
                                (struct sockaddr *)&src, &srclen);
 
@@ -85,7 +87,7 @@ void *peer_receiver(void *arg){
             // ###############################################
             // Protocole pour rejoindre un système d'enchères
             // ###############################################
-            if (code == 3 && len == 3 && nb_encheres > 0) { // CODE 3 : recoit demande pour rejoindre un système d'enchère
+            if (code == 3 && nb_encheres > 0) { // CODE 3 : recoit demande pour rejoindre un système d'enchère
                 uint16_t port_tcp_dest;
                 memcpy(&port_tcp_dest, &buffer[1], 2);  // Extraire le port du message reçu
 
@@ -95,8 +97,9 @@ void *peer_receiver(void *arg){
                 // Création de la structure sockaddr_in6 pour la connexion TCP
                 struct sockaddr_in6 dest_tcp = {0};
                 dest_tcp.sin6_family = AF_INET6;
-                dest_tcp.sin6_port = htons(ntohs(port_tcp_dest));  // Utiliser le port du serveur
+                dest_tcp.sin6_port = port_tcp_dest;  // Utiliser le port du serveur
                 dest_tcp.sin6_addr = src.sin6_addr;  // Utiliser l'adresse IP du pair
+
                 
                 if (IN6_IS_ADDR_LINKLOCAL(&src.sin6_addr)) {
                     dest_tcp.sin6_scope_id = global_iface_index;  // Spécifier l'index de l'interface
@@ -113,7 +116,7 @@ void *peer_receiver(void *arg){
                 if (connect(sock, (struct sockaddr *)&dest_tcp, sizeof(dest_tcp)) == 0) {
                    // Si la connexion est réussie, envoyer le message CODE 4
                     uint8_t msg[21];  // 1 + 2 + 16 + 2 = 21 octets
-                    uint16_t peer_id = atoi(id_peer);
+                    uint16_t peer_id = (uint16_t)id_peer;
                     if (msg_4(msg, peer_id, port_tcp) != 0) {
                         fprintf(stderr, "Erreur lors de la construction du message.\n");
                         return NULL;
@@ -121,7 +124,7 @@ void *peer_receiver(void *arg){
 
                     // Envoi
                     send(sock, msg, sizeof(msg), 0);
-                    printf("Réponse envoyée\n");
+                    printf("Réponse envoyée code 4\n");
                     close(sock);  // Fermer le socket après l'envoi
 
                 } else {
@@ -167,11 +170,13 @@ void peer_start(const char *nom, const char *interface){
         exit(EXIT_FAILURE);
     }
 
-    // Générer l'ID du pair
-    char ipv6_perso[INET6_ADDRSTRLEN];
-    snprintf(ipv6_perso, sizeof(ipv6_perso), "fe80::%x", iface_index);
-    generer_id_peer(nom, ipv6_perso);
+    // // Générer l'ID du pair
+    // char ipv6_perso[INET6_ADDRSTRLEN];
+    // snprintf(ipv6_perso, sizeof(ipv6_perso), "fe80::%x", iface_index);
+    id_peer = generer_id_peer();
 
+
+    // --------------------------------------------------------------------
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sock < 0){
         perror("socket");
@@ -202,6 +207,26 @@ void peer_start(const char *nom, const char *interface){
 
     signal(SIGINT, handle_sigint);
 
+    // Thread récepteur
+    pthread_t tid;
+    pthread_create(&tid, NULL, peer_receiver, &global_sock);
+
+
+    // Notifier les autres de la connexion
+    char join_msg[BUF_SIZE];
+    snprintf(join_msg, sizeof(join_msg), "[JOIN] %s a rejoint le groupe.\n", nom);
+
+    // ------------------------------------------------------------------------------------------
+    struct sockaddr_in6 dest = {0};
+    dest.sin6_family = AF_INET6;
+    dest.sin6_port = htons(PORT);
+    inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
+    dest.sin6_scope_id = iface_index;
+
+    sendto(sock, join_msg, strlen(join_msg), 0, (struct sockaddr *)&dest, sizeof(dest));
+    // --------------------------------------------------------------------------------------------
+    
+
     // socket TCP
     socket_tcp = create_tcp_socket_serveur();
     if (socket_tcp < 0) {
@@ -217,22 +242,8 @@ void peer_start(const char *nom, const char *interface){
     pthread_t tcp_thread;
     pthread_create(&tcp_thread, NULL, listen_tcp_thread, &listener_tcp);
 
-    // Notifier les autres de la connexion
-    char join_msg[BUF_SIZE];
-    snprintf(join_msg, sizeof(join_msg), "[JOIN] %s a rejoint le groupe.\n", nom);
+    // --------------------------------------------------------------------------------
 
-    struct sockaddr_in6 dest = {0};
-    dest.sin6_family = AF_INET6;
-    dest.sin6_port = htons(PORT);
-    inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
-    dest.sin6_scope_id = iface_index;
-
-    sendto(sock, join_msg, strlen(join_msg), 0,
-           (struct sockaddr *)&dest, sizeof(dest));
-
-    // Thread récepteur
-    pthread_t tid;
-    pthread_create(&tid, NULL, peer_receiver, &sock);
 
 
     // Envoi des messages
@@ -289,23 +300,26 @@ void peer_start(const char *nom, const char *interface){
 }
 
 
-void generer_id_peer(const char *nom, char *ipv6_perso) {
-    struct in6_addr addr;
-    // Conversion de l'adresse IPv6 en structure in6_addr
-    if (inet_pton(AF_INET6, ipv6_perso, &addr) != 1) {
-        perror("inet_pton");
-        return;
-    }
+int generer_id_peer() {
+    // struct in6_addr addr;
+    // // Conversion de l'adresse IPv6 en structure in6_addr
+    // if (inet_pton(AF_INET6, ipv6_perso, &addr) != 1) {
+    //     perror("inet_pton");
+    //     return;
+    // }
 
-    // Utiliser les 4 premiers octets de l'adresse IPv6 pour créer une valeur
-    unsigned int ipv6_part = 0;
-    for (int i = 0; i < 4; i++) {
-        ipv6_part = (ipv6_part << 8) | addr.s6_addr[i];
-    }
+    // // Utiliser les 4 premiers octets de l'adresse IPv6 pour créer une valeur
+    // unsigned int ipv6_part = 0;
+    // for (int i = 0; i < 4; i++) {
+    //     ipv6_part = (ipv6_part << 8) | addr.s6_addr[i];
+    // }
 
     srand(time(NULL)); // Initialiser le générateur de nombres aléatoires
-    // Générer un ID basé sur l'adresse et le nom
-    snprintf(id_peer, sizeof(id_peer), "%s-%x%d", nom, ipv6_part, rand() % 1000);
+    return ((int)rand()%25);
+    // // Générer un ID basé sur l'adresse et le nom
+    // snprintf(id_peer, sizeof(id_peer), "%s-%x%d", nom, ipv6_part, rand() % 1000);
+
+
 }
 
 
@@ -408,164 +422,164 @@ int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index)
 }
 
 // Function to connect to all other peers and send message 6
-int connect_to_peers_and_send_info(struct peer *p, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
-                                 uint16_t new_peer_port, unsigned char *new_peer_cle) {
-    int ret = 0;
-    struct peer *current = p->next;
+// int connect_to_peers_and_send_info(struct peer *p, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
+//                                  uint16_t new_peer_port, unsigned char *new_peer_cle) {
+//     int ret = 0;
+//     struct peer *current = p->next;
     
-    while (current != p) {
-        // Create TLS connection to the peer
-        int sock = connexion_TLS(current->ip, current->port_tcp);
-        if (sock < 0) {
-            fprintf(stderr, "Failed to create TLS connection to peer %d\n", current->id);
-            current = current->next;
-            continue;
-        }
+//     while (current != p) {
+//         // Create TLS connection to the peer
+//         int sock = connexion_TLS(current->ip, current->port_tcp);
+//         if (sock < 0) {
+//             fprintf(stderr, "Failed to create TLS connection to peer %d\n", current->id);
+//             current = current->next;
+//             continue;
+//         }
 
-        // Create and send message 6
-        uint8_t msg[1 + 2 + 16 + 2 + 113];  // CODE + ID + IP + PORT + CLE
-        int msg_len = msg_6(msg, new_peer_id, new_peer_ip, new_peer_port, new_peer_cle);
+//         // Create and send message 6
+//         uint8_t msg[1 + 2 + 16 + 2 + 113];  // CODE + ID + IP + PORT + CLE
+//         int msg_len = msg_6(msg, new_peer_id, new_peer_ip, new_peer_port, new_peer_cle);
         
-        if (send(sock, msg, msg_len, 0) != msg_len) {
-            fprintf(stderr, "Failed to send message 6 to peer %d\n", current->id);
-            close(sock);
-            current = current->next;
-            continue;
-        }
+//         if (send(sock, msg, msg_len, 0) != msg_len) {
+//             fprintf(stderr, "Failed to send message 6 to peer %d\n", current->id);
+//             close(sock);
+//             current = current->next;
+//             continue;
+//         }
 
-        // If we're in an active auction, send auction information
-        if (enchere_active >= 0) {
-            // Create message content with auction info
-            char message[256];
-            snprintf(message, sizeof(message), "AUCTION_INFO %s %u", 
-                    encheres[enchere_active].id, encheres[enchere_active].sock);
+//         // If we're in an active auction, send auction information
+//         if (enchere_active >= 0) {
+//             // Create message content with auction info
+//             char message[256];
+//             snprintf(message, sizeof(message), "AUCTION_INFO %s %u", 
+//                     encheres[enchere_active].id, encheres[enchere_active].sock);
             
-            // Sign the message
-            unsigned char signature[crypto_sign_BYTES];
-            if (crypto_sign_detached(signature, NULL, 
-                                   (const unsigned char *)message, strlen(message),
-                                   my_privkey) != 0) {
-                fprintf(stderr, "Failed to sign auction info message\n");
-                close(sock);
-                current = current->next;
-                continue;
-            }
+//             // Sign the message
+//             unsigned char signature[crypto_sign_BYTES];
+//             if (crypto_sign_detached(signature, NULL, 
+//                                    (const unsigned char *)message, strlen(message),
+//                                    my_privkey) != 0) {
+//                 fprintf(stderr, "Failed to sign auction info message\n");
+//                 close(sock);
+//                 current = current->next;
+//                 continue;
+//             }
 
-            // Send auction information
-            envoyer_info_auction(sock, atoi(id_peer), cpt, 0, 
-                               (const unsigned char *)message, strlen(message),
-                               signature);
-        }
+//             // Send auction information
+//             envoyer_info_auction(sock, atoi(id_peer), cpt, 0, 
+//                                (const unsigned char *)message, strlen(message),
+//                                signature);
+//         }
 
-        // Read response
-        uint8_t response[2];
-        int bytes_read = recv(sock, response, 2, 0);
-        if (bytes_read != 2) {
-            fprintf(stderr, "Failed to read response from peer %d\n", current->id);
-            close(sock);
-            current = current->next;
-            continue;
-        }
+//         // Read response
+//         uint8_t response[2];
+//         int bytes_read = recv(sock, response, 2, 0);
+//         if (bytes_read != 2) {
+//             fprintf(stderr, "Failed to read response from peer %d\n", current->id);
+//             close(sock);
+//             current = current->next;
+//             continue;
+//         }
 
-        close(sock);
-        current = current->next;
-    }
+//         close(sock);
+//         current = current->next;
+//     }
 
-    return ret;
-}
+//     return ret;
+// }
 
 // Function to handle a new peer connection (message 5)
-int handle_new_peer(struct peer *p, SSL *ssl, uint8_t *msg, size_t msg_len) {
-    struct message_5 msg_struct;
-    if (parse_msg_5(msg, msg_len, &msg_struct) != 0) {
-        return -1;
-    }
+// int handle_new_peer(struct peer *p, SSL *ssl, uint8_t *msg, size_t msg_len) {
+//     struct message_5 msg_struct;
+//     if (parse_msg_5(msg, msg_len, &msg_struct) != 0) {
+//         return -1;
+//     }
 
-    // Check if ID is already taken
-    uint16_t assigned_id = msg_struct.id;
-    if (find_peer_id(p, &assigned_id, false)) {
-        // Send error response (code 51)
-        uint8_t response[1] = {51};
-        SSL_write(ssl, response, 1);
-        return -1;
-    }
+//     // Check if ID is already taken
+//     uint16_t assigned_id = msg_struct.id;
+//     if (find_peer_id(p, &assigned_id, false)) {
+//         // Send error response (code 51)
+//         uint8_t response[1] = {51};
+//         SSL_write(ssl, response, 1);
+//         return -1;
+//     }
 
-    // Send success response with assigned ID (code 50)
-    uint8_t response[3] = {50, (assigned_id >> 8) & 0xFF, assigned_id & 0xFF};
-    SSL_write(ssl, response, 3);
+//     // Send success response with assigned ID (code 50)
+//     uint8_t response[3] = {50, (assigned_id >> 8) & 0xFF, assigned_id & 0xFF};
+//     SSL_write(ssl, response, 3);
 
-    // Connect to all other peers and send the new peer's information
-    if (connect_to_peers_and_send_info(p, assigned_id, msg_struct.ip, 
-                                     msg_struct.port, msg_struct.cle) != 0) {
-        return -1;
-    }
+//     // Connect to all other peers and send the new peer's information
+//     if (connect_to_peers_and_send_info(p, assigned_id, msg_struct.ip, 
+//                                      msg_struct.port, msg_struct.cle) != 0) {
+//         return -1;
+//     }
 
-    // Add the new peer to our list
-    return add_peer(p, assigned_id, msg_struct.ip, msg_struct.port, msg_struct.cle);
-}
+//     // Add the new peer to our list
+//     return add_peer(p, assigned_id, msg_struct.ip, msg_struct.port, msg_struct.cle);
+// }
 
-int find_peer_id(struct peer *p, uint16_t *id, bool find_free) {
-    if (!p || !id) return -1;
+// int find_peer_id(struct peer *p, uint16_t *id, bool find_free) {
+//     if (!p || !id) return -1;
 
-    // If we're checking if an ID is taken
-    if (!find_free) {
-        struct peer *current = p->next;
-        while (current != p) {
-            if (current->id == *id) {
-                return 1; // ID is taken
-            }
-            current = current->next;
-        }
-        return 0; // ID is free
-    }
+//     // If we're checking if an ID is taken
+//     if (!find_free) {
+//         struct peer *current = p->next;
+//         while (current != p) {
+//             if (current->id == *id) {
+//                 return 1; // ID is taken
+//             }
+//             current = current->next;
+//         }
+//         return 0; // ID is free
+//     }
 
-    // If we're looking for a free ID
-    uint16_t start_id = 1;
-    uint16_t end_id = 65535;
+//     // If we're looking for a free ID
+//     uint16_t start_id = 1;
+//     uint16_t end_id = 65535;
     
-    // First try the requested ID if provided
-    if (*id != 0) {
-        if (!find_peer_id(p, id, false)) {
-            return 0; // Requested ID is free
-        }
-        start_id = *id + 1;
-    }
+//     // First try the requested ID if provided
+//     if (*id != 0) {
+//         if (!find_peer_id(p, id, false)) {
+//             return 0; // Requested ID is free
+//         }
+//         start_id = *id + 1;
+//     }
 
-    // Search for a free ID
-    for (uint16_t test_id = start_id; test_id <= end_id; test_id++) {
-        if (!find_peer_id(p, &test_id, false)) {
-            *id = test_id;
-            return 0;
-        }
-    }
+//     // Search for a free ID
+//     for (uint16_t test_id = start_id; test_id <= end_id; test_id++) {
+//         if (!find_peer_id(p, &test_id, false)) {
+//             *id = test_id;
+//             return 0;
+//         }
+//     }
 
-    return -1; // No free ID found
-}
+//     return -1; // No free ID found
+// }
 
-int add_peer(struct peer *p, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
-    if (!p || !cle) return -1;
+// int add_peer(struct peer *p, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
+//     if (!p || !cle) return -1;
 
-    // Check if ID is available
-    if (find_peer_id(p, &id, false) == 1) {
-        // ID is taken, find a free one
-        if (find_peer_id(p, &id, true) != 0) {
-            return -1; // No free ID found
-        }
-    }
+//     // Check if ID is available
+//     if (find_peer_id(p, &id, false) == 1) {
+//         // ID is taken, find a free one
+//         if (find_peer_id(p, &id, true) != 0) {
+//             return -1; // No free ID found
+//         }
+//     }
 
-    struct peer *new_peer = malloc(sizeof(struct peer));
-    if (!new_peer) {
-        return -1;
-    }
+//     struct peer *new_peer = malloc(sizeof(struct peer));
+//     if (!new_peer) {
+//         return -1;
+//     }
 
-    new_peer->id = id;
-    new_peer->ip = ip;
-    new_peer->port_tcp = port;
-    memcpy(new_peer->cle, cle, 113);
+//     new_peer->id = id;
+//     new_peer->ip = ip;
+//     new_peer->port_tcp = port;
+//     memcpy(new_peer->cle, cle, 113);
 
-    // Insert at the beginning of the list
-    new_peer->next = p->next;
-    p->next = new_peer;
+//     // Insert at the beginning of the list
+//     new_peer->next = p->next;
+//     p->next = new_peer;
 
-    return 0;
-}
+//     return 0;
+// }

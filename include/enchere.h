@@ -11,6 +11,6 @@ void faire_offre(uint32_t prix);
 
 // Rejoindre une enchère
 int msg_join_enchere();
-int handle_incoming_connections(char *ip_dest, uint16_t *port_dest);
+// int handle_incoming_connections(char *ip_dest, uint16_t *port_dest);
 
 #endif // ENCHERE_H

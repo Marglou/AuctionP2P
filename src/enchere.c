@@ -119,7 +119,7 @@ void creer_enchere()
     char auction_id[64];
 
     // Génération d'un ID et d'une adresse multicast unique
-    snprintf(auction_id, sizeof(auction_id), "%.60s-%d", id_peer, cpt + 1);
+    snprintf(auction_id, sizeof(auction_id), "%d-%d", id_peer, cpt + 1);
 
     int r = rand() & 0xFFFF; // max 4 chiffres hexadécimaux
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", r);
@@ -130,7 +130,7 @@ void creer_enchere()
     // Create and send message 8 (auction initiation)
     uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
     msg[0] = 8; // CODE = 8 for auction initiation
-    uint16_t peer_id = atoi(id_peer);
+    uint16_t peer_id = (uint16_t)(id_peer);
     uint32_t numv = cpt + 1;
     uint32_t initial_price = 0; // You can modify this to set an initial price
 
@@ -158,34 +158,34 @@ void creer_enchere()
     cpt++; // Incrémente le compteur d'enchères initiées
 }
 
-int handle_incoming_connections(char *ip_dest, uint16_t *port_dest)
-{
-    struct sockaddr_in6 client_addr;
-    socklen_t addr_len = sizeof(client_addr);
+// int handle_incoming_connections(char *ip_dest, uint16_t *port_dest)
+// {
+//     struct sockaddr_in6 client_addr;
+//     socklen_t addr_len = sizeof(client_addr);
 
-    int client_sock = accept(socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
-    if (client_sock < 0)
-    {
-        perror("accept TCP");
-        return -1;
-    }
+//     int client_sock = accept(socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
+//     if (client_sock < 0)
+//     {
+//         perror("accept TCP");
+//         return -1;
+//     }
 
-    // Convertir l'adresse IP en chaîne lisible
-    inet_ntop(AF_INET6, &client_addr.sin6_addr, ip_dest, INET6_ADDRSTRLEN);
-    *port_dest = ntohs(client_addr.sin6_port);
+//     // Convertir l'adresse IP en chaîne lisible
+//     inet_ntop(AF_INET6, &client_addr.sin6_addr, ip_dest, INET6_ADDRSTRLEN);
+//     *port_dest = ntohs(client_addr.sin6_port);
 
-    // Réception du message
-    char buffer[BUF_SIZE];
-    ssize_t len = recv(client_sock, buffer, BUF_SIZE - 1, 0);
-    if (len > 0)
-    {
-        buffer[len] = '\0';
-        printf("Message reçu : %s\n", buffer);
-    }
+//     // Réception du message
+//     char buffer[BUF_SIZE];
+//     ssize_t len = recv(client_sock, buffer, BUF_SIZE - 1, 0);
+//     if (len > 0)
+//     {
+//         buffer[len] = '\0';
+//         printf("Message reçu : %s\n", buffer);
+//     }
 
-    close(client_sock);
-    return 0;
-}
+//     close(client_sock);
+//     return 0;
+// }
 
 int msg_join_enchere()
 {

@@ -30,13 +30,13 @@ typedef struct {
 } Peer;
 
 // Structure for the peer list
-struct peer {
-    uint16_t id;
-    struct in6_addr ip;
-    uint16_t port_tcp;
-    unsigned char cle[113];
-    struct peer *next;
-};
+// struct peer {
+//     uint16_t id;
+//     struct in6_addr ip;
+//     uint16_t port_tcp;
+//     unsigned char cle[113];
+//     struct peer *next;
+// };
 
 // Structure pour stocker les informations d'un pair
 struct peer_info {
@@ -54,7 +54,8 @@ extern EnchereSocket encheres[MAX_ENCHERES];
 extern int nb_encheres;    // Nombre d'enchères rejointes
 extern int enchere_active; // Index dans encheres[]
 extern int cpt; // Compteur pour les enchères qu'il a initié
-extern char id_peer[128]; // ID du pair
+// extern char id_peer[128]; // ID du pair
+extern int id_peer; 
 extern int global_sock; // Socket global
 extern char nom[100]; // Nom du pair
 extern int global_iface_index; // Index de l'interface réseau
@@ -74,13 +75,13 @@ void *auction_receiver(void *arg);
 void *peer_receiver(void *arg);
 void handle_sigint(int sig);
 
-void generer_id_peer(const char *nom, char *ipv6_perso);
+int generer_id_peer();
 
 int create_tcp_socket_serveur();
 int create_tcp_socket_client(const char *ip_dest, int port_dest);
 
 // Peer management functions
-int find_peer_id(struct peer *p, uint16_t *id, bool find_free);
-int add_peer(struct peer *p, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle);
+// int find_peer_id(struct peer *p, uint16_t *id, bool find_free);
+// int add_peer(struct peer *p, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle);
 
 #endif // PEER_H
