@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/socket.h>
-#include <asm-generic/socket.h>
+//#include <asm-generic/socket.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
 #include <netinet/in.h>
@@ -276,7 +276,7 @@ void *auction_receiver(void *arg)
                            id, numv, prix);
                     
                     // If we are the supervisor, relay the message with code 10
-                    if (enchere_active >= 0 && strcmp(encheres[enchere_active].id, id_peer) == 0) {
+                    /*if (enchere_active >= 0 && strcmp(encheres[enchere_active].id, id_peer) == 0) {
                         uint8_t relay_msg[1 + 2 + 4 + 4];
                         relay_msg[0] = 10; // Change code to 10
                         memcpy(&relay_msg[1], &buffer[1], 10); // Copy ID, NUMV, and PRIX
@@ -291,7 +291,7 @@ void *auction_receiver(void *arg)
                                (struct sockaddr *)&dest, sizeof(dest));
                         
                         printf("[Superviseur] Relais de l'offre de pair %u\n", id);
-                    }
+                    }*/
                     break;
                 }
                 
@@ -418,7 +418,7 @@ void faire_offre(uint32_t prix)
     // Create bid message (code 9)
     uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
     msg[0] = 9; // CODE = 9 for bid
-    uint16_t peer_id = atoi(id_peer);
+    uint16_t peer_id = (uint16_t)id_peer;
     uint32_t numv = cpt; // Current auction number
 
     // Convert to network byte order

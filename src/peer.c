@@ -9,7 +9,7 @@
 #include <netinet/in.h>
 #include <net/if.h>
 #include <sys/socket.h>
-#include <asm-generic/socket.h>
+//#include <asm-generic/socket.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>

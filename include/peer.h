@@ -79,6 +79,7 @@ int generer_id_peer();
 
 int create_tcp_socket_serveur();
 int create_tcp_socket_client(const char *ip_dest, int port_dest);
+int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index) ;
 
 // Peer management functions
 // int find_peer_id(struct peer *p, uint16_t *id, bool find_free);

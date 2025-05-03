@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/socket.h>
-#include <asm-generic/socket.h>
+//#include <asm-generic/socket.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
 #include <netinet/in.h>
@@ -85,7 +85,17 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
         ERR_print_errors_fp(stderr);
         return -1;
     }
-
+    /*if (SSL_CTX_use_certificate_file(ctx, "client.crt", SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        SSL_CTX_free(ctx);
+        return -1;
+    }
+    
+    if (SSL_CTX_use_PrivateKey_file(ctx, "client.key", SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        SSL_CTX_free(ctx);
+        return -1;
+    }*/
 
 
     // Create SSL structure
@@ -155,7 +165,7 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
         return -1;
     }
 
-    uint16_t peer_id = atoi(id_peer);
+    uint16_t peer_id = (uint16_t)id_peer;
     if (msg_5(msg, peer_id, port_tcp, cle) != 0) {
         printf("Erreur lors de la construction du message.\n");
         SSL_free(ssl);
@@ -172,7 +182,7 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
         return -1;
     }
 
-    printf("Message 5 envoyé : ID=%s, IP=%s, PORT=%u\n", id_peer, ip_str, ntohs(port));
+    printf("Message 5 envoyé : ID=%d, IP=%s, PORT=%u\n", id_peer, ip_str, ntohs(port));
 
     // Wait for response (message 50 or 51)
     uint8_t response[3];
@@ -190,7 +200,7 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
         struct message_50 msg_50;
         if (parse_msg_50(response, bytes_read, &msg_50) == 0) {
             printf("ID déjà pris. Nouvel ID reçu : %u\n", msg_50.id);
-            snprintf(id_peer, sizeof(id_peer), "%u", msg_50.id);
+            //snprintf(id_peer, sizeof(id_peer), "%u", msg_50.id);
         }
     } else if (response[0] == 51) {
         // Received message 51 - ID accepted
