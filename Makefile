@@ -1,7 +1,7 @@
 # Variables
 CC = gcc
-CFLAGS = -Iinclude -I/opt/homebrew/opt/openssl@3/include -I/opt/homebrew/opt/libsodium/include
-LDFLAGS = -L/opt/homebrew/opt/openssl@3/lib -L/opt/homebrew/opt/libsodium/lib -lssl -lcrypto -lsodium
+CFLAGS = -Iinclude -I/opt/homebrew/opt/openssl@3/include
+LDFLAGS = -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
 SRC_DIR = src
 OUT_DIR = build
 BIN = enchere

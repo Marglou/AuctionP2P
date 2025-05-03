@@ -8,7 +8,10 @@
 #include <stddef.h>  // pour size_t
 #include <openssl/evp.h>
 
-#include <sodium.h>
+// Constants for key sizes
+#define ED25519_PUBLIC_KEY_SIZE 60
+#define ED25519_SIGNATURE_SIZE 64
+#define ED25519_KEY_WITH_HEADER_SIZE 113
 
 // Structures de messages
 
@@ -57,7 +60,7 @@ typedef struct {
     uint8_t lmess;    // longueur du message signé
     uint8_t message[256];   // message signé
     uint8_t lsig;     // longueur de la signature (toujours 64 avec Ed25519)
-    unsigned char signature[crypto_sign_BYTES]; // Signature Ed25519 (64 octets)
+    unsigned char signature[ED25519_SIGNATURE_SIZE]; // Signature Ed25519 (64 octets)
 } ValidationMessageComplet;
 
 typedef struct {
@@ -66,21 +69,21 @@ typedef struct {
     uint8_t lmess;                     // longueur du message signé
     unsigned char message[256];        // message signé
     uint8_t lsig;                      // longueur de la signature (toujours 64)
-    unsigned char signature[crypto_sign_BYTES];  // signature Ed25519 (64 octets)
+    unsigned char signature[ED25519_SIGNATURE_SIZE];  // signature Ed25519 (64 octets)
     uint16_t nb_validations;           // nombre de validations reçues
 } FinalMessage;
 
 typedef struct {
     int id;
     unsigned char message[256];
-    unsigned char signature[crypto_sign_BYTES];
+    unsigned char signature[ED25519_SIGNATURE_SIZE];
 } SignedMessage;
 
 #define PUBLIC_KEY_MSG_CODE 20
 typedef struct {
     uint8_t code;                      // 20
     uint16_t id;                      // ID du pair
-    unsigned char public_key[crypto_sign_PUBLICKEYBYTES];  // 32 octets
+    unsigned char public_key[ED25519_KEY_WITH_HEADER_SIZE];  // 113 octets
 } PublicKeyMessage;
 
 typedef struct {
@@ -91,7 +94,7 @@ typedef struct {
     uint8_t lmess;                     // longueur du message signé
     unsigned char message[256];        // message signé
     uint8_t lsig;                      // longueur de la signature (toujours 64)
-    unsigned char signature[crypto_sign_BYTES];  // signature Ed25519 (64 octets)
+    unsigned char signature[ED25519_SIGNATURE_SIZE];  // signature Ed25519 (64 octets)
 } EnchereMessage;
 
 // Déclaration des structures pour la récupération des champs
