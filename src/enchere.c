@@ -121,6 +121,8 @@ void creer_enchere()
     // Génération d'un ID et d'une adresse multicast unique
     snprintf(auction_id, sizeof(auction_id), "%d-%d", id_peer, cpt + 1);
 
+    int auction_num_id = id_peer * 100 + (cpt + 1);
+    //adresse multicaste adresse specifique a l'enchere lancer
     int r = rand() & 0xFFFF; // max 4 chiffres hexadécimaux
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", r);
 
@@ -129,20 +131,17 @@ void creer_enchere()
 
     // Create and send message 8 (auction initiation)
     uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
-    msg[0] = 8; // CODE = 8 for auction initiation
-    uint16_t peer_id = (uint16_t)(id_peer);
+    msg[0] = 8; // CODE = 8 for auction initiation*/
+    uint16_t peer_id = auction_num_id;
     uint32_t numv = cpt + 1;
+    printf("Entrez le prix de départ de l'enchère : ");
     uint32_t initial_price = 0; // You can modify this to set an initial price
-
-    // Convert to network byte order
-    uint16_t id_net = htons(peer_id);
-    uint32_t numv_net = htonl(numv);
-    uint32_t prix_net = htonl(initial_price);
-
-    // Copy values to message
-    memcpy(&msg[1], &id_net, 2);
-    memcpy(&msg[3], &numv_net, 4);
-    memcpy(&msg[7], &prix_net, 4);
+    if (scanf("%d", &initial_price) != 1) {
+        fprintf(stderr, "Erreur : entrée invalide pour le prix.\n");
+    }
+    if(msg_8(msg,peer_id,numv,initial_price)!=11){
+        printf("Erreur message 8");
+    }
 
     // Send the message to the auction group
     struct sockaddr_in6 dest = {0};

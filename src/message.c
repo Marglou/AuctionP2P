@@ -153,6 +153,24 @@ int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct) {
     return 0;
 }
 
+int msg_8(uint8_t *msg, uint16_t id,uint32_t numv,uint32_t prix) {
+    msg[0] = 8;  // Code du message
+
+    // ID (2 octets, réseau)
+    uint16_t net_id = htons(id);
+    memcpy(&msg[1], &net_id, sizeof(net_id));
+
+    // numv (4 octets, réseau)
+    uint32_t net_numv = htonl(numv);
+    memcpy(&msg[3], &net_numv, sizeof(net_numv));
+
+    // prix (4 octets, réseau)
+    uint32_t net_prix = htonl(prix);
+    memcpy(&msg[7], &net_prix, sizeof(net_prix));
+
+    return 11;  // Taille totale du message
+}
+
 void envoyer_message(int socket, uint16_t id) {
     QuitMessage msg;
     msg.CODE = 13;  // Code du message de fin

@@ -131,6 +131,14 @@ struct message_6 {
     unsigned char cle[113];  // Clé publique ED25519 de P (113 octets)
 };
 
+
+struct message_8 {
+    uint8_t code;     // = 8
+    uint16_t id;      // ID du pair P
+    uint32_t numv; 
+    uint32_t prix;    // Port TCP de P
+};
+
 // Prototypes de fonctions
 int msg_4 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp);
 int parse_msg_4 (uint8_t *msg, size_t msg_len, struct message_4 *msg_struct);
@@ -146,6 +154,8 @@ int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct);
 
 int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp, unsigned char *cle);
 int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct);
+
+int msg_8(uint8_t *msg, uint16_t id,uint32_t numv,uint32_t prix);
 
 int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
 
