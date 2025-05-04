@@ -87,56 +87,51 @@ int msg_5(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, unsigned char *publ
     offset += 16;
 
     // PORT (big endian)
-    // msg[offset++] = (port_tcp >> 8) & 0xFF;
-    // msg[offset++] = port_tcp & 0xFF;
-    uint16_t port_net = htons(port_tcp); // Convertir en format réseau
-    memcpy(msg+offset, &port_net, 2);
-    offset += 2;
-    printf("msg_5 : id_peer = %d, port_tcp = %d\n", id_peer, port_tcp);
+    msg[offset++] = (port_tcp >> 8) & 0xFF;
+    msg[offset++] = port_tcp & 0xFF;
 
     // CLE PUBLIQUE (113 octets)
     memcpy(msg + offset, public_key, ED25519_KEY_WITH_HEADER_SIZE);
     offset += ED25519_KEY_WITH_HEADER_SIZE;
-    printf("msg_5 : id_peer = %d, port_tcp = %d, public_key = %s\n", id_peer, port_tcp, public_key);
+
     return offset;  // taille totale écrite
 }
 
-
-int parse_msg_5 (uint8_t *msg, size_t msg_len, struct message_5 *msg_struct) {
+int parse_msg_5(uint8_t *msg, size_t msg_len, struct message_5 *msg_struct) {
     if (msg_len < 1 + 2 + 16 + 2 + ED25519_KEY_WITH_HEADER_SIZE)
         return -1;  // message trop court
 
-    msg_struct->code = msg[0];
-    if (msg_struct->code != 5) {
-        fprintf(stderr, "Erreur : seul le code 4 est pris en charge.\n");
-        return -1;
-    }
+    size_t offset = 0;
 
-    msg_struct->id = ntohs(*(uint16_t*)&msg[1]);
-    memcpy(&msg_struct->ip, &msg[3], 16);
-    msg_struct->port = ntohs(*(uint16_t*)&msg[19]);
-    memcpy(msg_struct->cle, &msg[21], ED25519_KEY_WITH_HEADER_SIZE);
+    msg_struct->code = msg[offset++];
 
-    // printf("msg_5_PARSE : id_peer = %d, port_tcp = %d, public_key = %s\n", msg_struct->id, msg_struct->port, msg_struct->cle);
+    msg_struct->id = (msg[offset] << 8) | msg[offset + 1];
+    offset += 2;
+
+    memcpy(&msg_struct->ip, msg + offset, 16);
+    offset += 16;
+
+    msg_struct->port = (msg[offset] << 8) | msg[offset + 1];
+    offset += 2;
+
+    memcpy(msg_struct->cle, msg + offset, ED25519_KEY_WITH_HEADER_SIZE);
+    offset += ED25519_KEY_WITH_HEADER_SIZE;
+
     return 0;
 }
 
 
 // --------------------------- CODE 50 -----------------------------------------------
-int msg_50(uint8_t *msg, uint16_t new_id) {
+int msg_50(uint8_t *msg) {
     msg[0] = 50;  // CODE = 50
-    msg[1] = (new_id >> 8) & 0xFF;
-    msg[2] = new_id & 0xFF;
-    return 3;  // taille totale écrite
+    return 1;  // taille totale écrite
 }
 
 int parse_msg_50(uint8_t *msg, size_t msg_len, struct message_50 *msg_struct) {
-    if (msg_len < 3) return -1;  // message trop court
+    if (msg_len < 1) return -1;  // message trop court
 
     msg_struct->code = msg[0];
     if (msg_struct->code != 50) return -1;
-
-    msg_struct->id = (msg[1] << 8) | msg[2];
     return 0;
 }
 

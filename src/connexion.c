@@ -83,8 +83,53 @@ void *listen_tcp_thread(void *arg) {
                                (parsed_msg.port));
                         state->response_received = true;
                         state->first_response_time = time(NULL);
+                        
+                        // Vérifier si l'ID existe déjà
+                        bool id_exists = false;
+                        int count=0;
+                        int position_enr=0;
+                        for (int i = 0; i < num_peers; ++i) {
+                            if (discovered_peers[i].id == parsed_msg.id) {
+                                count++;
+                            }
+                            if(count==2){
+                                id_exists = true;
+                                position_enr=i;
+                                break;
+                            }
+                        }if (id_exists==false && num_peers < MAX_PEERS) {
+                            
+                            //uint16_t new_id = 10;  // À définir selon ta logique
+
+                            uint8_t msg[1];
+                            int msg_len = msg_50(msg);
+
+                            if (send(client_sock, msg, msg_len, 0) != msg_len) {
+                                perror("send msg_50");
+                            } else {
+                                printf("Message 50 envoyé à %s:%u avec ID=%u\n",
+                                inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
+                                ntohs(parsed_msg.port),parsed_msg.id);
+                            }
+                        }else{
+                            uint16_t new_id = (int)rand()%25;  // À définir selon ta logique
+
+                            uint8_t msg[3];
+                            int msg_len = msg_51(msg, new_id);
+
+                            if (send(client_sock, msg, msg_len, 0) != msg_len) {
+                                perror("send msg_51");
+                            } else {
+                                printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",inet_ntoa(*(struct in_addr *)&parsed_msg.ip),ntohs(parsed_msg.port), new_id);
+
+                                // Ajouter le nouveau pair à la liste
+                                discovered_peers[position_enr].id = new_id;
+                            }
+                        }
                     }
                 }
+
+            }
                 close(client_sock);
 
             }
@@ -110,12 +155,12 @@ void *listen_tcp_thread(void *arg) {
             //     printf("Connexion inconnue rejetée (byte 0x%02x)\n", peekbuf[0]);
             //     close(client_sock);
             // }
-        }
+        } return NULL;
     }
 
     // SSL_CTX_free(ctx);
-    return NULL;
-}
+   
+
 
 
 int connexion_TLS(struct in6_addr ip, uint16_t port) {
@@ -268,14 +313,14 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
         // Received message 50 - ID already taken, get new ID
         struct message_50 msg_50;
         if (parse_msg_50(response, bytes_read, &msg_50) == 0) {
-            printf("ID déjà pris. Nouvel ID reçu : %u\n", msg_50.id);
+            printf("ID accepté \n");
             //snprintf(id_peer, sizeof(id_peer), "%u", msg_50.id);
         }
     } else if (response[0] == 51) {
         // Received message 51 - ID accepted
         struct message_51 msg_51;
         if (parse_msg_51(response, bytes_read, &msg_51) == 0) {
-            printf("ID accepté : %u\n", msg_51.id);
+            printf("nouveau ID : %u\n", msg_51.id);
         }
     } else {
         printf("Message de réponse inattendu : %u\n", response[0]);

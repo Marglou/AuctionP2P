@@ -116,7 +116,6 @@ struct message_5 {
 
 struct message_50 {
     uint8_t code;     // = 50
-    uint16_t id;      // Nouvel ID assigné
 };
 
 struct message_51 {
@@ -139,7 +138,7 @@ int parse_msg_4 (uint8_t *msg, size_t msg_len, struct message_4 *msg_struct);
 int msg_5 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, unsigned char *public_key);
 int parse_msg_5 (uint8_t *msg, size_t msg_len, struct message_5 *msg_struct);
 
-int msg_50(uint8_t *msg, uint16_t new_id);
+int msg_50(uint8_t *msg);
 int parse_msg_50(uint8_t *msg, size_t msg_len, struct message_50 *msg_struct);
 
 int msg_51(uint8_t *msg, uint16_t id);
