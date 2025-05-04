@@ -40,6 +40,9 @@ struct tcp_listener_state listener_tcp = {0};
 
 struct peer_info discovered_peers[MAX_PEERS];
 size_t num_peers = 0;
+//info superviseur 
+int is_superviseur=0;
+int enchere_supervise=0;
 
 char * pseudo;
 

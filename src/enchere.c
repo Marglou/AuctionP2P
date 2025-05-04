@@ -17,7 +17,7 @@
 #include "../include/message.h"
 #include "../include/connexion.h"
 
-void join_enchere(const char *id, const char *group)
+void join_enchere(int id, const char *group)
 {
     //  Vérifier si peut rejoindre l'enchère
     if (nb_encheres >= MAX_ENCHERES)
@@ -29,9 +29,9 @@ void join_enchere(const char *id, const char *group)
     // Vérifier si l'enchère existe déjà
     for (int i = 0; i < nb_encheres; i++)
     {
-        if (strcmp(encheres[i].id, id) == 0)
+        if (encheres[i].id_enchere==id)
         {
-            fprintf(stderr, "Vous êtes déjà dans l'enchère %s.\n", id);
+            fprintf(stderr, "Vous êtes déjà dans l'enchère %d.\n", id);
             return;
         }
     }
@@ -78,7 +78,8 @@ void join_enchere(const char *id, const char *group)
     }
 
     // Sauvegarde dans la liste des enchères
-    strncpy(encheres[nb_encheres].id, id, sizeof(encheres[nb_encheres].id));
+    //strncpy(encheres[nb_encheres].id, id, sizeof(encheres[nb_encheres].id));
+    encheres[nb_encheres].id_enchere=id;
     strncpy(encheres[nb_encheres].group, group, sizeof(encheres[nb_encheres].group));
     encheres[nb_encheres].sock = sock;
 
@@ -97,11 +98,11 @@ void join_enchere(const char *id, const char *group)
     pthread_t tid;
     pthread_create(&tid, NULL, auction_receiver, sock_ptr);
 
-    printf("Vous avez rejoint l'enchère %s sur %s\n", id, group);
+    printf("Vous avez rejoint l'enchère %d sur %s\n", id, group);
 
     // Send ACCEPTED message
     char accept_msg[BUF_SIZE];
-    snprintf(accept_msg, sizeof(accept_msg), "[ACCEPTED] Vous avez rejoint l'enchère %s\n", id);
+    snprintf(accept_msg, sizeof(accept_msg), "[ACCEPTED] Vous avez rejoint l'enchère %d\n", id);
     sendto(sock, accept_msg, strlen(accept_msg), 0, (struct sockaddr *)&addr, sizeof(addr));
 
     nb_encheres++;
@@ -115,11 +116,16 @@ void creer_enchere()
         return;
     }
 
+    if (is_superviseur == 1){
+        printf("Deja superviseur d'une enchere\n");
+        return;
+    }
+
     char auction_group[INET6_ADDRSTRLEN];
-    char auction_id[64];
+    //char auction_id[64];
 
     // Génération d'un ID et d'une adresse multicast unique
-    snprintf(auction_id, sizeof(auction_id), "%d-%d", id_peer, cpt + 1);
+    //snprintf(auction_id, sizeof(auction_id), "%d-%d", id_peer, cpt + 1);
 
     int auction_num_id = id_peer * 100 + (cpt + 1);
     //adresse multicaste adresse specifique a l'enchere lancer
@@ -127,7 +133,7 @@ void creer_enchere()
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", r);
 
     // Join the auction group first
-    join_enchere(auction_id, auction_group);
+    join_enchere(auction_num_id, auction_group);
 
     // Create and send message 8 (auction initiation)
     uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
@@ -153,8 +159,10 @@ void creer_enchere()
     sendto(encheres[enchere_active].sock, msg, sizeof(msg), 0,
            (struct sockaddr *)&dest, sizeof(dest));
 
-    printf("Enchère initiée : ID=%s, NUMV=%u, PRIX=%u\n", auction_id, numv, initial_price);
+    printf("Enchère initiée : ID=%d, NUMV=%u, PRIX=%u\n", auction_num_id, numv, initial_price);
     cpt++; // Incrémente le compteur d'enchères initiées
+    is_superviseur = 1;
+    enchere_supervise = auction_num_id;
 }
 
 

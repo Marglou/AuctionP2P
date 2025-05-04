@@ -21,7 +21,7 @@
 typedef struct {
     int sock;
     char group[INET6_ADDRSTRLEN];
-    char id[64];
+    int id_enchere;
 } EnchereSocket;
 
 typedef struct {
@@ -68,6 +68,9 @@ extern struct peer_info discovered_peers[MAX_PEERS]; // Liste des pairs découve
 extern size_t num_peers; // Nombre de pairs découverts
 
 extern char* pseudo;
+
+extern int is_superviseur;
+extern int enchere_supervise;
 
 
 // Fonctions principales
