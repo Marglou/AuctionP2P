@@ -107,36 +107,6 @@ int verify_message(EVP_PKEY *pubkey, const unsigned char *msg, size_t msglen,
     return result;
 }
 
-// int generate_certificate_for_peer(const char *peer_name, char *cert_path, size_t cert_path_size,
-//                                   char *key_path, size_t key_path_size)
-// {
-//     char dir_path[256];
-
-//     // Créer les dossiers certs/ et certs/<peer_name>
-//     snprintf(dir_path, sizeof(dir_path), "certs/%s", peer_name);
-//     mkdir("certs", 0755);  // Crée le dossier racine s'il n'existe pas
-//     mkdir(dir_path, 0755); // Crée le dossier du pair
-
-//     // Définir les chemins de fichiers .pem
-//     snprintf(cert_path, cert_path_size, "%s/cert.pem", dir_path);
-//     snprintf(key_path, key_path_size, "%s/key.pem", dir_path);
-
-//     // Commande OpenSSL pour générer certificat et clé RSA 2048 bits
-//     char cmd[1024];
-//     snprintf(cmd, sizeof(cmd),
-//              "openssl req -x509 -newkey rsa:2048 -keyout %s -out %s -days 365 -nodes "
-//              "-subj \"/CN=%s\" >/dev/null 2>&1",
-//              key_path, cert_path, peer_name);
-
-//     // Exécute la commande
-//     if (system(cmd) != 0)
-//     {
-//         fprintf(stderr, "Erreur lors de la génération du certificat pour %s.\n", peer_name);
-//         return -1;
-//     }
-
-//     return 0;
-// }
 
 int generate_certificate_for_peer(const char *peer_name, char *cert_path, size_t cert_path_size,
                                           char *key_path, size_t key_path_size)

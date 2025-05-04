@@ -97,7 +97,7 @@ void *listen_tcp_thread(void *arg) {
                                 position_enr=i;
                                 break;
                             }
-                        }if (id_exists==false && num_peers < MAX_PEERS) {
+                        } if (id_exists==false && num_peers < MAX_PEERS) {
                             
                             //uint16_t new_id = 10;  // À définir selon ta logique
 
@@ -126,6 +126,27 @@ void *listen_tcp_thread(void *arg) {
                                 discovered_peers[position_enr].id = new_id;
                             }
                         }
+
+                        //  ENVOI MSG 7 à P
+        
+                        // Envoi du message 7 à P pour rejoindre l'enchere
+                        uint8_t buffer[4096];
+                        // GERE LE NOMBRE
+                        int taille = msg_7(buffer, sizeof(buffer), encheres[0], 1);
+                        if (taille < 0) {
+                            fprintf(stderr, "Erreur de création du message.\n");
+                            close(client_sock);
+                            return -1;
+                        }
+
+                        printf("Envoi du message 7 à P\n");
+                        if (send(client_sock, buffer, taille, 0) < 0) {
+                            perror("Erreur d'envoi du message");
+                            close(client_sock);
+                            return -1;
+                        }
+                        printf("Message 7 envoyé à P SUCCES.\n");
+                        close(client_sock);
                     }
                 }
 

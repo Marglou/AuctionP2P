@@ -27,7 +27,6 @@ EnchereSocket encheres[MAX_ENCHERES];
 int nb_encheres = 0;    // Nombre d'enchères rejointes
 int enchere_active = -1; // Index dans encheres[]
 int cpt = 0 ; // Compteur pour les enchères qu'il a initié
-// char id_peer[128]; // ID du pair
 int id_peer = -1;
 
 int global_sock = -1;
@@ -176,10 +175,9 @@ void peer_start(const char *nom, const char *interface){
     }
 
     // // Générer l'ID du pair
-    // char ipv6_perso[INET6_ADDRSTRLEN];
-    // snprintf(ipv6_perso, sizeof(ipv6_perso), "fe80::%x", iface_index);
     id_peer = generer_id_peer();
     pseudo = nom;
+    // memcpy(pseudo, nom, sizeof(nom));
 
     // --------------------------------------------------------------------
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
@@ -272,7 +270,7 @@ void peer_start(const char *nom, const char *interface){
         }
         else {
             char msg[BUF_SIZE];
-            snprintf(msg, sizeof(msg), "[%s] %s", nom, buffer);
+            snprintf(msg, sizeof(msg), "[%200.s] %800.s", nom, buffer);
             if (strlen(msg) >= sizeof(msg)) {
                 fprintf(stderr, "Erreur : le message est trop long pour le tampon.\n");
             }
@@ -305,25 +303,8 @@ void peer_start(const char *nom, const char *interface){
 
 
 int generer_id_peer() {
-    // struct in6_addr addr;
-    // // Conversion de l'adresse IPv6 en structure in6_addr
-    // if (inet_pton(AF_INET6, ipv6_perso, &addr) != 1) {
-    //     perror("inet_pton");
-    //     return;
-    // }
-
-    // // Utiliser les 4 premiers octets de l'adresse IPv6 pour créer une valeur
-    // unsigned int ipv6_part = 0;
-    // for (int i = 0; i < 4; i++) {
-    //     ipv6_part = (ipv6_part << 8) | addr.s6_addr[i];
-    // }
-
     srand(time(NULL)); // Initialiser le générateur de nombres aléatoires
     return ((int)rand()%25);
-    // // Générer un ID basé sur l'adresse et le nom
-    // snprintf(id_peer, sizeof(id_peer), "%s-%x%d", nom, ipv6_part, rand() % 1000);
-
-
 }
 
 

@@ -122,10 +122,6 @@ void creer_enchere()
     }
 
     char auction_group[INET6_ADDRSTRLEN];
-    //char auction_id[64];
-
-    // Génération d'un ID et d'une adresse multicast unique
-    //snprintf(auction_id, sizeof(auction_id), "%d-%d", id_peer, cpt + 1);
 
     int auction_num_id = id_peer * 100 + (cpt + 1);
     //adresse multicaste adresse specifique a l'enchere lancer
@@ -183,7 +179,6 @@ int msg_join_enchere()
     while (attempts++ < max_attempts && listener_tcp.response_received == 0)
     {
         printf("Reponse recue %d\n", listener_tcp.response_received);
-
         printf("Tentative %d : envoi du message CODE 3.\n", attempts);
         uint8_t msg[3] = {3};
         uint16_t port_tcp_net = htons(port_tcp);
@@ -202,12 +197,18 @@ int msg_join_enchere()
         printf("Connexion à : ID=%u, IP=%s, PORT=%u\n", peer_Q->id, ip_str, port);
 
         // Connexion au pair 
-        if (connexion_TLS(peer_Q->ip, port) != 0)
-        {
-            fprintf(stderr, "Erreur de connexion au pair.\n");
+        // connexion qui doit rester ouverte, stocker le return de x=connexion_TLS et voir comment gerer ca
+        int socket_P = connexion_TLS(peer_Q->ip, port);
+        if (socket_P < 0){
+            close(socket_P);
+            printf("Erreur connexion à Q\n");
             return -1;
         }
+
+        printf("Je suis ds msg_join étape 7\n");
+        close(socket_P);
         return 0;
+
     }
 
     printf("Aucune enchère trouvée. Création d'une nouvelle.\n");
@@ -257,7 +258,7 @@ void *auction_receiver(void *arg)
                            id, numv, prix);
                     
                     // If we are the supervisor, relay the message with code 10
-                    /*if (enchere_active >= 0 && strcmp(encheres[enchere_active].id, id_peer) == 0) {
+                    /*if (enchere_active >= 0 && encheres[enchere_active].id == id_peer) {
                         uint8_t relay_msg[1 + 2 + 4 + 4];
                         relay_msg[0] = 10; // Change code to 10
                         memcpy(&relay_msg[1], &buffer[1], 10); // Copy ID, NUMV, and PRIX

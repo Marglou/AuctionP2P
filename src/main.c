@@ -61,16 +61,10 @@ int main() {
         printf("Taille de la clé publique : %d octets\n", size);
     }
 
-    // unsigned char CLE[114]; // 113 + 1 pour \0
-    // if (generate_ed25519_keypair_and_extract_CLE("key.pem", CLE) == 0) {
-    //     printf("CLE (113 octets) :\n%s\n", CLE);
-    // }
-
-
     register_peer(nom, my_pubkey);
 
-    peer_start(nom, "en0");  // Pour MAC
-    //peer_start(nom, "eth0");  
+    // peer_start(nom, "en0");  // Pour MAC
+    peer_start(nom, "eth0");  
     //peer_start(nom, "enp0s3");
 
     cleanup_superviseur();

@@ -18,11 +18,20 @@
 #define MAX_PEERS 5
 
 
+// typedef struct {
+//     int sock;
+//     char group[INET6_ADDRSTRLEN];
+//     int id_enchere;
+// } EnchereSocket;
+
 typedef struct {
     int sock;
     char group[INET6_ADDRSTRLEN];
     int id_enchere;
+
+    struct peer *liste_participants; // Liste des pairs de cette enchère
 } EnchereSocket;
+
 
 typedef struct {
     char name[100];
@@ -30,13 +39,13 @@ typedef struct {
 } Peer;
 
 // Structure for the peer list
-// struct peer {
-//     uint16_t id;
-//     struct in6_addr ip;
-//     uint16_t port_tcp;
-//     unsigned char cle[113];
-//     struct peer *next;
-// };
+struct peer {
+    uint16_t id;
+    struct in6_addr ip;
+    uint16_t port_tcp;
+    unsigned char cle[113];
+    struct peer *next;
+};
 
 // Structure pour stocker les informations d'un pair
 struct peer_info {
@@ -54,7 +63,6 @@ extern EnchereSocket encheres[MAX_ENCHERES];
 extern int nb_encheres;    // Nombre d'enchères rejointes
 extern int enchere_active; // Index dans encheres[]
 extern int cpt; // Compteur pour les enchères qu'il a initié
-// extern char id_peer[128]; // ID du pair
 extern int id_peer; 
 extern int global_sock; // Socket global
 extern char nom[100]; // Nom du pair

@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>  // pour size_t
 #include <openssl/evp.h>
+#include "../include/peer.h"
 
 // Constants for key sizes
 #define ED25519_PUBLIC_KEY_SIZE 60
@@ -155,6 +156,11 @@ int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct);
 int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp, unsigned char *cle);
 int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct);
 
+int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pairs);
+int parse_msg_7(uint8_t *buffer, size_t buffer_len, uint16_t *id_q, struct in6_addr *ip_enchere, uint16_t *port_enchere,
+                uint16_t *nb_pairs, struct peer **liste_out);
+
+                
 int msg_8(uint8_t *msg, uint16_t id,uint32_t numv,uint32_t prix);
 
 int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
