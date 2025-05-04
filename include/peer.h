@@ -67,6 +67,8 @@ extern struct tcp_listener_state listener_tcp; // État du listener TCP
 extern struct peer_info discovered_peers[MAX_PEERS]; // Liste des pairs découverts
 extern size_t num_peers; // Nombre de pairs découverts
 
+extern char* pseudo;
+
 
 // Fonctions principales
 void peer_start(const char *nom, const char *interface);

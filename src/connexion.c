@@ -19,16 +19,14 @@
 #include "../include/message.h"
 #include "../include/enchere.h"
 
-
 void *listen_tcp_thread(void *arg) {
     struct tcp_listener_state *state = arg;
 
-    // Initialize SSL context for the server
-    SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
-    if (!ctx) {
-        ERR_print_errors_fp(stderr);
-        return NULL;
-    }
+    // SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
+    // if (!ctx) {
+    //     ERR_print_errors_fp(stderr);
+    //     return NULL;
+    // }
 
     while (1) {
         fd_set readfds;
@@ -36,82 +34,143 @@ void *listen_tcp_thread(void *arg) {
         FD_SET(state->socket_tcp, &readfds);
         struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
 
-        if (select(state->socket_tcp + 1, &readfds, NULL, NULL, &timeout) > 0) {
+        if (select(state->socket_tcp + 1, &readfds, NULL, NULL, &timeout) > 0 &&
+            FD_ISSET(state->socket_tcp, &readfds)) {
 
-            if (FD_ISSET(state->socket_tcp, &readfds)) {
-                    // Accept incoming connection
-                struct sockaddr_in6 client_addr;
-                socklen_t addr_len = sizeof(client_addr);
-                int client_sock = accept(state->socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
-                if (client_sock < 0) {
-                    perror("accept");
-                    continue;
-                }
-
-            uint8_t buffer[BUF_SIZE];
-            ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
-            if (len > 0 && buffer[0] == 4 && num_peers >= 0) {
-                struct message_4 parsed_msg;
-                if (parse_msg_4(buffer, len, &parsed_msg) == 0) {
-                    printf("Pair trouvé : ID=%u, port=%u\n", parsed_msg.id, ntohs(parsed_msg.port));
-                    discovered_peers[num_peers++] = (struct peer_info){
-                        .id = parsed_msg.id,
-                        .ip = parsed_msg.ip,
-                        .port_tcp = parsed_msg.port
-                    };
-                    state->response_received = true;
-                    state->first_response_time = time(NULL);
-                }
+            struct sockaddr_in6 client_addr;
+            socklen_t addr_len = sizeof(client_addr);
+            int client_sock = accept(state->socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
+            if (client_sock < 0) {
+                perror("accept");
+                continue;
             }
 
+            // Peek 1er octet sans consommer
+            uint8_t peekbuf[1];
+            ssize_t peeklen = recv(client_sock, peekbuf, 1, MSG_PEEK);
+            if (peeklen <= 0) {
                 close(client_sock);
+                continue;
             }
+
+            if (peekbuf[0] == 4) {
+                // Connexion TCP simple (message 4 attendu)
+                uint8_t buffer[BUF_SIZE];
+                ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
+                if (len > 0 && buffer[0] == 4 && num_peers >= 0) {
+                    struct message_4 parsed_msg;
+                    if (parse_msg_4(buffer, len, &parsed_msg) == 0) {
+                        printf("Pair TCP trouvé : ID=%u, port=%u\n", parsed_msg.id, ntohs(parsed_msg.port));
+                        discovered_peers[num_peers++] = (struct peer_info){
+                            .id = parsed_msg.id,
+                            .ip = parsed_msg.ip,
+                            .port_tcp = parsed_msg.port
+                        };
+                        state->response_received = true;
+                        state->first_response_time = time(NULL);
+                    }
+                }
+                close(client_sock);
+
+            } else if (peekbuf[0] == 5) {
+                // Connexion TCP avec message 5
+                uint8_t buffer[BUF_SIZE];
+                ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
+                if (len > 0 && buffer[0] == 5) {
+                    struct message_5 parsed_msg;
+                    if (parse_msg_5(buffer, len, &parsed_msg) == 0) {
+                        printf("Message 5 reçu : ID=%u,  PORT=%u\n", parsed_msg.id,
+                               (parsed_msg.port));
+                        state->response_received = true;
+                        state->first_response_time = time(NULL);
+                    }
+                }
+                close(client_sock);
+
+            }
+            // else if (peekbuf[0] == 0x16) {
+            //     // TLS probable
+            //     SSL *ssl = SSL_new(ctx);
+            //     SSL_set_fd(ssl, client_sock);
+
+            //     if (SSL_accept(ssl) > 0) {
+            //         // Traitement TLS ici
+            //         printf("Connexion TLS acceptée\n");
+            //         // (tu peux ajouter du recv/send ici en SSL)
+            //     } else {
+            //         fprintf(stderr, "Erreur SSL_accept\n");
+            //         ERR_print_errors_fp(stderr);
+            //     }
+
+            //     SSL_shutdown(ssl);
+            //     SSL_free(ssl);
+            //     close(client_sock);
+
+            // } else {
+            //     printf("Connexion inconnue rejetée (byte 0x%02x)\n", peekbuf[0]);
+            //     close(client_sock);
+            // }
         }
     }
 
-    SSL_CTX_free(ctx);
+    // SSL_CTX_free(ctx);
     return NULL;
 }
+
 
 int connexion_TLS(struct in6_addr ip, uint16_t port) {
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
     printf("Connexion TLS à %s:%u...\n", ip_str, ntohs(port));    
 
-    // Initialize SSL context
-    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
-    printf("SSL_CTX_new\n");
-    if (!ctx) {
-        ERR_print_errors_fp(stderr);
-        return -1;
-    }
-    /*if (SSL_CTX_use_certificate_file(ctx, "client.crt", SSL_FILETYPE_PEM) <= 0) {
-        ERR_print_errors_fp(stderr);
-        SSL_CTX_free(ctx);
-        return -1;
-    }
-    
-    if (SSL_CTX_use_PrivateKey_file(ctx, "client.key", SSL_FILETYPE_PEM) <= 0) {
-        ERR_print_errors_fp(stderr);
-        SSL_CTX_free(ctx);
-        return -1;
-    }*/
+    // // Initialize SSL context
+    // SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+    // if (!ctx) {
+    //     ERR_print_errors_fp(stderr);
+    //     return -1;
+    // }
 
 
-    // Create SSL structure
-    SSL *ssl = SSL_new(ctx);
-    if (!ssl) {
-        ERR_print_errors_fp(stderr);
-        SSL_CTX_free(ctx);
-        return -1;
-    }
+    //     // Charger le certificat
+    //     char cert_path[256], key_path[256];
+    //     snprintf(cert_path, sizeof(cert_path), "certs/%s/cert.pem", pseudo);
+    //     snprintf(key_path, sizeof(key_path), "certs/%s/key.pem", pseudo);
+        
+    //     if (SSL_CTX_use_certificate_file(ctx, cert_path, SSL_FILETYPE_PEM) <= 0) {
+    //         fprintf(stderr, "Erreur lors du chargement du certificat depuis %s\n", cert_path);
+    //         ERR_print_errors_fp(stderr);
+    //         return -1;
+    //     }
+        
+    //     if (SSL_CTX_use_PrivateKey_file(ctx, key_path, SSL_FILETYPE_PEM) <= 0) {
+    //         fprintf(stderr, "Erreur lors du chargement de la clé privée depuis %s\n", key_path);
+    //         ERR_print_errors_fp(stderr);
+    //         return -1;
+    //     }
+        
+
+    // // Vérifie que la clé privée correspond au certificat
+    // if (!SSL_CTX_check_private_key(ctx)) {
+    //     fprintf(stderr, "Erreur : la clé privée ne correspond pas au certificat public\n");
+    //     return NULL;
+    // }
+
+
+
+    // // Create SSL structure
+    // SSL *ssl = SSL_new(ctx);
+    // if (!ssl) {
+    //     ERR_print_errors_fp(stderr);
+    //     SSL_CTX_free(ctx);
+    //     return -1;
+    // }
 
     // Create socket
     int socket_tcp_client = socket(AF_INET6, SOCK_STREAM, 0);
     if (socket_tcp_client < 0) {
         perror("socket TCP");
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
+        // SSL_free(ssl);
+        // SSL_CTX_free(ctx);
         return -1;
     }
 
@@ -134,63 +193,73 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
     // Connect
     if (connect(socket_tcp_client, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
         perror("connect");
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
+        // SSL_free(ssl);
+        // SSL_CTX_free(ctx);
         close(socket_tcp_client);
         return -1;
     }
 
     // Associate socket with SSL structure
-    SSL_set_fd(ssl, socket_tcp_client);
+    // SSL_set_fd(ssl, socket_tcp_client);
 
-    // Perform SSL handshake
-    if (SSL_connect(ssl) <= 0) {
-        ERR_print_errors_fp(stderr);
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
-        close(socket_tcp_client);
-        return -1;
-    }
+    // // Perform SSL handshake
+    // if (SSL_connect(ssl) <= 0) {
+    //     ERR_print_errors_fp(stderr);
+    //     SSL_free(ssl);
+    //     SSL_CTX_free(ctx);
+    //     close(socket_tcp_client);
+    //     return -1;
+    // } 
 
-    printf("SSL connection established\n");
+
+    // printf("SSL connection established\n");
 
     // Send message 5
     uint8_t msg[1 + 2 + 16 + 2 + 113];  // CODE + ID + IP + PORT + CLE
-    unsigned char cle[113];
-    if (format_ed25519_public_key(cle, my_pubkey) != 0) {
-        printf("Erreur lors du formatage de la clé publique.\n");
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
-        close(socket_tcp_client);
-        return -1;
+    unsigned char CLE[113];
+    // if (format_ed25519_public_key(cle, my_pubkey) != 0) {
+    //     printf("Erreur lors du formatage de la clé publique.\n");
+    //     // SSL_free(ssl);
+    //     // SSL_CTX_free(ctx);
+    //     close(socket_tcp_client);
+    //     return -1;
+    // }
+
+    if (generate_ed25519_keypair_and_extract_CLE("key.pem", CLE) == 0) {
+        // printf("CLE (113 octets) :\n%s\n", CLE);
     }
 
     uint16_t peer_id = (uint16_t)id_peer;
-    if (msg_5(msg, peer_id, port_tcp, cle) != 0) {
+
+    if (msg_5(msg, peer_id, port_tcp, CLE) != 134) {
         printf("Erreur lors de la construction du message.\n");
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
+        // SSL_free(ssl);
+        // SSL_CTX_free(ctx);
         close(socket_tcp_client);
         return -1;
     }
 
-    if (SSL_write(ssl, msg, sizeof(msg)) <= 0) {
-        ERR_print_errors_fp(stderr);
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
-        close(socket_tcp_client);
-        return -1;
-    }
+    // Send message
+    sendto(socket_tcp_client, msg, sizeof(msg), 0, (struct sockaddr *)&dest, sizeof(dest));
+
+    // if (SSL_write(ssl, msg, sizeof(msg)) <= 0) {
+    //     ERR_print_errors_fp(stderr);
+    //     SSL_free(ssl);
+    //     SSL_CTX_free(ctx);
+    //     close(socket_tcp_client);
+    //     return -1;
+    // }
 
     printf("Message 5 envoyé : ID=%d, IP=%s, PORT=%u\n", id_peer, ip_str, ntohs(port));
 
     // Wait for response (message 50 or 51)
     uint8_t response[3];
-    int bytes_read = SSL_read(ssl, response, sizeof(response));
+    ssize_t bytes_read = recv(socket_tcp_client, response, sizeof(response), 0);
+    // int bytes_read = SSL_read(ssl, response, sizeof(response));
     if (bytes_read <= 0) {
         ERR_print_errors_fp(stderr);
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
+        // SSL_free(ssl);
+        // SSL_CTX_free(ctx);
         close(socket_tcp_client);
         return -1;
     }
@@ -210,8 +279,8 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
         }
     } else {
         printf("Message de réponse inattendu : %u\n", response[0]);
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
+        // SSL_free(ssl);
+        // SSL_CTX_free(ctx);
         close(socket_tcp_client);
         return -1;
     }

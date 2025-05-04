@@ -41,6 +41,8 @@ struct tcp_listener_state listener_tcp = {0};
 struct peer_info discovered_peers[MAX_PEERS];
 size_t num_peers = 0;
 
+char * pseudo;
+
 // Gestion de la déconnexion propre avec Ctrl+C
 void handle_sigint(int sig)
 {
@@ -174,7 +176,7 @@ void peer_start(const char *nom, const char *interface){
     // char ipv6_perso[INET6_ADDRSTRLEN];
     // snprintf(ipv6_perso, sizeof(ipv6_perso), "fe80::%x", iface_index);
     id_peer = generer_id_peer();
-
+    pseudo = nom;
 
     // --------------------------------------------------------------------
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
@@ -236,14 +238,13 @@ void peer_start(const char *nom, const char *interface){
 
     // État du listener TCP
     listener_tcp.socket_tcp = socket_tcp;
-    listener_tcp.response_received = false;
+    listener_tcp.response_received = 0;
     listener_tcp.first_response_time = 0;
     
     pthread_t tcp_thread;
     pthread_create(&tcp_thread, NULL, listen_tcp_thread, &listener_tcp);
 
     // --------------------------------------------------------------------------------
-
 
 
     // Envoi des messages

@@ -5,6 +5,7 @@ LDFLAGS = -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
 SRC_DIR = src
 OUT_DIR = build
 BIN = enchere
+SECURITE = certs
 SRC = $(wildcard $(SRC_DIR)/*.c)
 OBJ = $(patsubst $(SRC_DIR)/%.c, $(OUT_DIR)/%.o, $(SRC))
 
@@ -22,7 +23,7 @@ $(BIN): $(OBJ)
 
 # Clean build files
 clean:
-	rm -rf $(OUT_DIR) $(BIN)
+	rm -rf $(OUT_DIR) $(BIN) $(SECURITE)
 
 # Run the program
 run: $(BIN)

@@ -18,4 +18,8 @@ int sign_message(EVP_PKEY *privkey, const unsigned char *msg, size_t msglen,
 int verify_message(EVP_PKEY *pubkey, const unsigned char *msg, size_t msglen,
                    const unsigned char *sig, size_t siglen);
 
+int generate_certificate_for_peer(const char *peer_name, char *cert_path, size_t cert_path_size, char *key_path, size_t key_path_size);
+int get_public_key_size(const char *cert_path);
+int generate_ed25519_keypair_and_extract_CLE(const char *key_path, unsigned char *CLE);
+
 #endif

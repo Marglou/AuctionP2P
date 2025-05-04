@@ -158,34 +158,6 @@ void creer_enchere()
     cpt++; // Incrémente le compteur d'enchères initiées
 }
 
-// int handle_incoming_connections(char *ip_dest, uint16_t *port_dest)
-// {
-//     struct sockaddr_in6 client_addr;
-//     socklen_t addr_len = sizeof(client_addr);
-
-//     int client_sock = accept(socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
-//     if (client_sock < 0)
-//     {
-//         perror("accept TCP");
-//         return -1;
-//     }
-
-//     // Convertir l'adresse IP en chaîne lisible
-//     inet_ntop(AF_INET6, &client_addr.sin6_addr, ip_dest, INET6_ADDRSTRLEN);
-//     *port_dest = ntohs(client_addr.sin6_port);
-
-//     // Réception du message
-//     char buffer[BUF_SIZE];
-//     ssize_t len = recv(client_sock, buffer, BUF_SIZE - 1, 0);
-//     if (len > 0)
-//     {
-//         buffer[len] = '\0';
-//         printf("Message reçu : %s\n", buffer);
-//     }
-
-//     close(client_sock);
-//     return 0;
-// }
 
 int msg_join_enchere()
 {
@@ -201,8 +173,10 @@ int msg_join_enchere()
     int attempts = 0;
     time_t start = time(NULL);
 
-    while (attempts++ < max_attempts && !listener_tcp.response_received)
+    while (attempts++ < max_attempts && listener_tcp.response_received == 0)
     {
+        printf("Reponse recue %d\n", listener_tcp.response_received);
+
         printf("Tentative %d : envoi du message CODE 3.\n", attempts);
         uint8_t msg[3] = {3};
         uint16_t port_tcp_net = htons(port_tcp);

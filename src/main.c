@@ -51,10 +51,26 @@ int main() {
         return 1;
     }
 
+    char cert_path[512], key_path[512];
+    if (generate_certificate_for_peer(nom, cert_path, sizeof(cert_path), key_path, sizeof(key_path)) != 0) {
+        return 1;
+    }
+
+    int size = get_public_key_size("certs/e/cert.pem");
+    if (size > 0) {
+        printf("Taille de la clé publique : %d octets\n", size);
+    }
+
+    // unsigned char CLE[114]; // 113 + 1 pour \0
+    // if (generate_ed25519_keypair_and_extract_CLE("key.pem", CLE) == 0) {
+    //     printf("CLE (113 octets) :\n%s\n", CLE);
+    // }
+
+
     register_peer(nom, my_pubkey);
 
-    peer_start(nom, "en0");  // Pour MAC
-    //peer_start(nom, "eth0");  
+    // peer_start(nom, "en0");  // Pour MAC
+    peer_start(nom, "eth0");  
     //peer_start(nom, "enp0s3");
 
     cleanup_superviseur();
