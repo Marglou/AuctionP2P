@@ -17,22 +17,24 @@
 #include "../include/message.h"
 #include "../include/connexion.h"
 
-void join_enchere(int id, const char *group)
+
+int join_enchere(int id,  char *group)
 {
-    //  Vérifier si peut rejoindre l'enchère
+    // Vérifier si peut rejoindre l'enchère
     if (nb_encheres >= MAX_ENCHERES)
     {
         fprintf(stderr, "Nombre maximum d'enchères atteint.\n");
-        return;
+        return -1;
     }
 
     // Vérifier si l'enchère existe déjà
     for (int i = 0; i < nb_encheres; i++)
     {
-        if (encheres[i].id_enchere==id)
+
+        if (encheres[i].id_enchere == id)
         {
             fprintf(stderr, "Vous êtes déjà dans l'enchère %d.\n", id);
-            return;
+            return -1;
         }
     }
 
@@ -41,7 +43,7 @@ void join_enchere(int id, const char *group)
     if (sock < 0)
     {
         perror("socket enchere");
-        return;
+        return -1;
     }
 
     int reuse = 1;
@@ -50,14 +52,26 @@ void join_enchere(int id, const char *group)
 
     struct sockaddr_in6 addr = {0};
     addr.sin6_family = AF_INET6;
-    addr.sin6_port = htons(PORT_ENCHERE);
-    addr.sin6_addr = in6addr_any;
+    // addr.sin6_port = htons(PORT_ENCHERE);
+    addr.sin6_port = htons(encheres[enchere_active].port_enchere); // Port de l'enchère
+    // addr.sin6_addr = in6addr_any;
+    if (inet_pton(AF_INET6, group, &addr.sin6_addr) != 1) {
+        perror("inet_pton (group enchere)");
+        close(sock);
+        return -1;
+    }
+    printf("adresse : %s\n", group);
+    printf("port : %d\n", ntohs(addr.sin6_port));
+    if (IN6_IS_ADDR_LINKLOCAL(&addr.sin6_addr))
+    {
+        addr.sin6_scope_id = global_iface_index; // Spécifier l'index de l'interface
+    }
 
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
         perror("bind enchere");
         close(sock);
-        return;
+        return -1;
     }
 
     // S'abonner au groupe multicast spécifique à l'enchère
@@ -66,7 +80,7 @@ void join_enchere(int id, const char *group)
     {
         perror("inet_pton (group enchere)");
         close(sock);
-        return;
+        return -1;
     }
     mreq.ipv6mr_interface = global_iface_index;
 
@@ -74,49 +88,63 @@ void join_enchere(int id, const char *group)
     {
         perror("setsockopt (join group enchere)");
         close(sock);
-        return;
+        return -1;
     }
 
     // Sauvegarde dans la liste des enchères
-    //strncpy(encheres[nb_encheres].id, id, sizeof(encheres[nb_encheres].id));
-    encheres[nb_encheres].id_enchere=id;
-    strncpy(encheres[nb_encheres].group, group, sizeof(encheres[nb_encheres].group));
+    encheres[nb_encheres].id_enchere = id;
+    if (inet_pton(AF_INET6, group, &encheres[nb_encheres].group) != 1)
+    {
+        fprintf(stderr, "Erreur : adresse IPv6 invalide\n");
+        close(sock);
+        return -1;
+    }
     encheres[nb_encheres].sock = sock;
 
     // On passe l'enchère active à celle qui vient d'être rejointe
     enchere_active = nb_encheres;
-
     int *sock_ptr = malloc(sizeof(int));
     if (!sock_ptr)
     {
         perror("malloc");
         close(sock);
-        return;
+        return -1;
     }
     *sock_ptr = sock;
 
     pthread_t tid;
-    pthread_create(&tid, NULL, auction_receiver, sock_ptr);
+    if (pthread_create(&tid, NULL, auction_receiver, sock_ptr) != 0)
+    {
+        perror("pthread_create");
+        free(sock_ptr);
+        close(sock);
+        return -1;
+    }
 
     printf("Vous avez rejoint l'enchère %d sur %s\n", id, group);
 
     // Send ACCEPTED message
     char accept_msg[BUF_SIZE];
     snprintf(accept_msg, sizeof(accept_msg), "[ACCEPTED] Vous avez rejoint l'enchère %d\n", id);
-    sendto(sock, accept_msg, strlen(accept_msg), 0, (struct sockaddr *)&addr, sizeof(addr));
+    if (sendto(sock, accept_msg, strlen(accept_msg), 0, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        perror("sendto (accept message)");
+        close(sock);
+        return -1;
+    }
 
     nb_encheres++;
+    return 0;  // Succès
 }
 
 void creer_enchere()
 {
-    if (nb_encheres >= MAX_ENCHERES)
-    {
+    if (nb_encheres >= MAX_ENCHERES) {
         fprintf(stderr, "Le nombre maximum d'enchères a été atteint.\n");
         return;
     }
 
-    if (is_superviseur == 1){
+    if (is_superviseur == 1) {
         printf("Deja superviseur d'une enchere\n");
         return;
     }
@@ -128,8 +156,21 @@ void creer_enchere()
     int r = rand() & 0xFFFF; // max 4 chiffres hexadécimaux
     snprintf(auction_group, sizeof(auction_group), "ff15::%x", r);
 
+    enchere_active++;
+    encheres[enchere_active].id_enchere = auction_num_id;
+    struct in6_addr group_addr;
+    if (inet_pton(AF_INET6, auction_group, &group_addr) != 1) {
+        fprintf(stderr, "Erreur : adresse IPv6 invalide\n");
+        return;
+    }
+    encheres[enchere_active].group = group_addr;
+    encheres[enchere_active].port_enchere = generate_random_port(); // Port de l'enchère
     // Join the auction group first
-    join_enchere(auction_num_id, auction_group);
+    if (join_enchere(auction_num_id, auction_group) != 0)
+    {
+        fprintf(stderr, "Erreur lors de la création de l'enchère.\n");
+        return;
+    }
 
     // Create and send message 8 (auction initiation)
     uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
@@ -148,10 +189,13 @@ void creer_enchere()
     // Send the message to the auction group
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
-    dest.sin6_port = htons(PORT_ENCHERE);
+    // dest.sin6_port = htons(PORT_ENCHERE);
+    dest.sin6_port = htons(encheres[enchere_active].port_enchere); // Port de l'enchère
     inet_pton(AF_INET6, auction_group, &dest.sin6_addr);
-    dest.sin6_scope_id = global_iface_index;
-
+    // dest.sin6_scope_id = global_iface_index;
+    if (IN6_IS_ADDR_LINKLOCAL(&dest.sin6_addr)) {
+        dest.sin6_scope_id = global_iface_index; // Spécifier l'index de l'interface
+    }
     sendto(encheres[enchere_active].sock, msg, sizeof(msg), 0,
            (struct sockaddr *)&dest, sizeof(dest));
 
@@ -206,7 +250,35 @@ int msg_join_enchere()
         }
 
         printf("Je suis ds msg_join étape 7\n");
+
+        // RECEVOIR MESSAGE 7
+        uint8_t buffer[1024];
+        ssize_t len = recv(socket_P, buffer, sizeof(buffer) - 1, 0);
+        if (len <= 0)
+        {
+            perror("recv");
+            close(socket_P);
+            return -1;
+        }
+        buffer[len] = '\0';
+        printf("Message reçu 7\n");
+        // struct message_7 msg7;
+        // printf("indice de l'enchere active %d\n", enchere_active);
+        enchere_active++;
+        // printf("num de parse msg7 %d\n",decode_message_7(buffer, len, &encheres[enchere_active]));
+        // if (decode_message_7(buffer, len) != 0)
+        // {
+        //     fprintf(stderr, "Erreur lors du parsing du message 7.\n");
+        //     close(socket_P);
+        //     return -1;
+        // }
+        decode_message_7(buffer, len);
+        printf("Message 7 reçu : ID_Q=, IP_enchere=, PORT_enchere\n");
         close(socket_P);
+
+        char str_ip[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, &encheres[enchere_active].group, str_ip, sizeof(str_ip));
+        join_enchere(encheres[enchere_active].id_enchere, str_ip);
         return 0;
 
     }
@@ -228,6 +300,7 @@ void *auction_receiver(void *arg)
 
     while (1)
     {
+        memset(buffer, 0, BUF_SIZE);
         ssize_t len = recvfrom(sock, buffer, BUF_SIZE - 1, 0,
                                (struct sockaddr *)&src, &srclen);
 
@@ -289,6 +362,7 @@ void *auction_receiver(void *arg)
                 
                 default:
                     // Handle text messages
+                    buffer[len] = '\0'; // Assure la terminaison
                     printf("[Enchère] %s", buffer);
                     fflush(stdout);
                     break;
@@ -416,9 +490,10 @@ void faire_offre(uint32_t prix)
     // Send the bid message to the auction group
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
-    dest.sin6_port = htons(PORT_ENCHERE);
-    inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
+    // dest.sin6_port = htons(PORT_ENCHERE);
+    // inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
     dest.sin6_scope_id = global_iface_index;
+    dest.sin6_addr = encheres[enchere_active].group;
 
     sendto(encheres[enchere_active].sock, msg, sizeof(msg), 0,
            (struct sockaddr *)&dest, sizeof(dest));

@@ -24,10 +24,22 @@ void init_openssl()
 
 int main() {
 
-    char nom[100];
+    // char nom[100];
+    // printf("Nom du pair : ");
+    // fflush(stdout);
+    // fgets(nom, sizeof(nom), stdin);
+    // nom[strcspn(nom, "\n")] = '\0';
+
+    char nom[100];  // Déclaration du tableau pour le nom du pair
+
+    // Demander le nom de l'utilisateur
     printf("Nom du pair : ");
-    fflush(stdout);
-    fgets(nom, sizeof(nom), stdin);
+    fflush(stdout);  // Assurer que le message est bien affiché avant la lecture de l'entrée
+
+    // Lire l'entrée de l'utilisateur
+    fgets(nom, sizeof(nom), stdin); 
+
+    // Enlever le caractère de nouvelle ligne '\n' si présent
     nom[strcspn(nom, "\n")] = '\0';
 
     // init_superviseur();
@@ -57,9 +69,9 @@ int main() {
     }
 
     int size = get_public_key_size("certs/e/cert.pem");
-    if (size > 0) {
-        printf("Taille de la clé publique : %d octets\n", size);
-    }
+    // if (size > 0) {
+    //     printf("Taille de la clé publique : %d octets\n", size);
+    // }
 
     register_peer(nom, my_pubkey);
 

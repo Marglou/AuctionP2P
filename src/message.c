@@ -9,21 +9,18 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
+#include <unistd.h> // pour close()
+#include <netinet/in.h> // Pour les fonctions de conversion de réseau
 
 #include "../include/message.h"
 #include "../include/peer.h"
 #include "../include/superviseur.h"
+#include "../include/enchere.h"
+#include "../include/connexion.h"
 
-#include <stdint.h>
-#include <string.h>
-#include <stdio.h>
-#include <unistd.h> // pour close()
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include <netinet/in.h> // Pour les fonctions de conversion de réseau
 
-#include "../include/peer.h"
+
+
 
 // --------------------------- CODE 4 -----------------------------------------------
 int msg_4(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp)
@@ -191,7 +188,6 @@ void envoyer_message(int socket, uint16_t id)
     msg.CODE = 13;      // Code du message de fin
     msg.ID = htons(id); // Conversion en big-endian
 
-    // Envoi du message
     send(socket, &msg, sizeof(msg), 0);
 }
 
@@ -205,7 +201,6 @@ void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_
     msg.NUMV = htonl(numv); // Conversion en big-endian
     msg.PRIX = htonl(prix); // Conversion en big-endian
 
-    // Envoi du message
     send(socket, &msg, sizeof(msg), 0);
 }
 
@@ -261,7 +256,6 @@ void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t num
         msg.ID = htons(id);
         msg.NUMV = htonl(numv);
 
-        // Envoi du message
         send(socket, &msg, sizeof(msg), 0);
     }
     else
@@ -398,90 +392,6 @@ int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct)
 }
 
 // --------------------------- CODE 7 -----------------------------------------------
-// int msg_7(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix,
-//           const unsigned char *message, size_t message_len,
-//           const unsigned char *signature, size_t sig_len) {
-//     if (!msg || !message || !signature || message_len > 256 || sig_len != ED25519_SIGNATURE_SIZE)
-//         return -1;
-
-//     size_t offset = 0;
-//     msg[offset++] = 7;  // CODE = 7
-
-//     // ID (big endian)
-//     msg[offset++] = (id >> 8) & 0xFF;
-//     msg[offset++] = id & 0xFF;
-
-//     // NUMV (big endian)
-//     msg[offset++] = (numv >> 24) & 0xFF;
-//     msg[offset++] = (numv >> 16) & 0xFF;
-//     msg[offset++] = (numv >> 8) & 0xFF;
-//     msg[offset++] = numv & 0xFF;
-
-//     // PRIX (big endian)
-//     msg[offset++] = (prix >> 24) & 0xFF;
-//     msg[offset++] = (prix >> 16) & 0xFF;
-//     msg[offset++] = (prix >> 8) & 0xFF;
-//     msg[offset++] = prix & 0xFF;
-
-//     // LMESS
-//     msg[offset++] = (uint8_t)message_len;
-
-//     // MESS
-//     memcpy(msg + offset, message, message_len);
-//     offset += message_len;
-
-//     // LSIG
-//     msg[offset++] = (uint8_t)sig_len;
-
-//     // SIG
-//     memcpy(msg + offset, signature, sig_len);
-//     offset += sig_len;
-
-//     return offset;  // taille totale écrite
-// }
-
-// int parse_msg_7(uint8_t *msg, size_t msg_len, EnchereMessage *msg_struct) {
-//     if (!msg || !msg_struct || msg_len < 1 + 2 + 4 + 4 + 1 + 1 + ED25519_SIGNATURE_SIZE)
-//         return -1;
-
-//     size_t offset = 0;
-
-//     msg_struct->code = msg[offset++];
-//     if (msg_struct->code != 7) return -1;
-
-//     // ID
-//     msg_struct->id = (msg[offset] << 8) | msg[offset + 1];
-//     offset += 2;
-
-//     // NUMV
-//     msg_struct->numv = (msg[offset] << 24) | (msg[offset + 1] << 16) |
-//                       (msg[offset + 2] << 8) | msg[offset + 3];
-//     offset += 4;
-
-//     // PRIX
-//     msg_struct->prix = (msg[offset] << 24) | (msg[offset + 1] << 16) |
-//                       (msg[offset + 2] << 8) | msg[offset + 3];
-//     offset += 4;
-
-//     // LMESS
-//     msg_struct->lmess = msg[offset++];
-
-//     // MESS
-//     if (msg_struct->lmess > 0) {
-//         memcpy(msg_struct->message, msg + offset, msg_struct->lmess);
-//     }
-//     offset += msg_struct->lmess;
-
-//     // LSIG
-//     msg_struct->lsig = msg[offset++];
-//     if (msg_struct->lsig != ED25519_SIGNATURE_SIZE) return -1;
-
-//     // SIG
-//     memcpy(msg_struct->signature, msg + offset, msg_struct->lsig);
-//     offset += msg_struct->lsig;
-
-//     return 0;
-// }
 
 int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pairs)
 {
@@ -499,14 +409,16 @@ int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pair
     offset += sizeof(uint16_t);
 
     // IP_enchere
-    struct in6_addr group_addr;
-    if (inet_pton(AF_INET6, q.group, &group_addr) != 1)
-        return -1;
-    memcpy(buffer + offset, &group_addr, 16);
+    memcpy(buffer + offset, &q.group, 16);
     offset += 16;
 
-    // PORT
-    uint16_t port_net = htons(ntohs(((struct sockaddr_in6 *)&q.sock)->sin6_port)); // facultatif
+    // PORT faire une recherche pour donner le port associé à la bonne enchère
+    q.port_enchere = encheres[enchere_active].port_enchere; // Convertir le port en big-endian
+    // printf("Port enchere : %d\n", q.port_enchere);
+    // uint16_t port_net = htons(ntohs(((struct sockaddr_in6 *)&q.sock)->sin6_port)); // facultatif
+    uint16_t port_net = htons(q.port_enchere);
+    // printf("Port enchere : %d\n", ntohs(port_net));
+
     memcpy(buffer + offset, &port_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
@@ -547,51 +459,129 @@ int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pair
     return offset; // taille totale du message
 }
 
-int parse_msg_7(uint8_t *buffer, size_t buffer_len, uint16_t *id_q,
-                struct in6_addr *ip_enchere, uint16_t *port_enchere,
-                uint16_t *nb_pairs, struct peer **liste_out)
-{
-    if (!buffer || buffer_len < 22)
-        return -1; // taille minimale : 1+2+16+2+2
+int decode_message_7(uint8_t *buffer, size_t buffer_size) {
+    if (!buffer || buffer_size < 22) {
+        return -1; // Taille insuffisante
+    }
 
     size_t offset = 0;
 
-    // CODE
+    // CODE = 7 (vérification de l'entête)
     uint8_t code = buffer[offset++];
-    if (code != 7)
-        return -1;
+    if (code != 7) return -1; // Le code ne correspond pas
 
     // ID_Q
-    memcpy(id_q, buffer + offset, sizeof(uint16_t));
-    *id_q = ntohs(*id_q);
+    memcpy(&encheres[enchere_active].id_enchere, buffer + offset, sizeof(uint16_t));
+    encheres[enchere_active].id_enchere = ntohs(encheres[enchere_active].id_enchere);
     offset += sizeof(uint16_t);
 
     // IP_enchere
-    memcpy(ip_enchere, buffer + offset, 16);
+    memcpy(&encheres[enchere_active].group, buffer + offset, 16);
     offset += 16;
 
-    // PORT_enchere
-    memcpy(port_enchere, buffer + offset, sizeof(uint16_t));
-    *port_enchere = ntohs(*port_enchere);
+    // PORT
+    memcpy(&encheres[enchere_active].port_enchere, buffer + offset, sizeof(uint16_t));
+    encheres[enchere_active].port_enchere = ntohs(encheres[enchere_active].port_enchere);
+    offset += sizeof(uint16_t);
+
+    
+    // Affichage des données décodées
+    // printf("ID Enchère: %d\n", participants->id_enchere);
+
+    // Affichage de l'IP en format IPv6
+    char str_ip[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &encheres[enchere_active].group, str_ip, INET6_ADDRSTRLEN);
+    // printf("Adresse IPv6 du groupe: %s\n", str_ip);
+    // printf("Port Enchère: %d\n", participants->port_enchere);
+    //  ESSAYER DE SE CONNECTER A L'ENCHERE
+    // if (join_enchere(encheres[enchere_active].id_enchere, str_ip) != 0) {
+    //     fprintf(stderr, "Erreur lors de la connexion à l'enchère\n");
+    //     return -1;
+    // }
+
+    // NB (nombre de pairs)
+    memcpy(&encheres[enchere_active].nb_pairs, buffer + offset, sizeof(uint16_t));
+    encheres[enchere_active].nb_pairs = ntohs(encheres[enchere_active].nb_pairs);
+    offset += sizeof(uint16_t);
+
+    // Liste des peers
+    encheres[enchere_active].liste_participants = NULL; // Initialiser la liste des pairs à NULL
+    peer **last_ptr = &encheres[enchere_active].liste_participants; // Pointeur pour insérer de nouveaux éléments dans la liste
+
+    for (int i = 0; i < encheres[enchere_active].nb_pairs; ++i) {
+        if (offset + 2 + 16 + 2 + 113 > buffer_size) {
+            return -1; // Taille insuffisante pour un pair
+        }
+
+        // Allocation mémoire pour un nouveau pair
+        peer *p = malloc(sizeof(peer));
+        if (!p) {
+            return -1; // Échec de l'allocation mémoire
+        }
+
+        // ID du pair
+        memcpy(&p->id, buffer + offset, sizeof(uint16_t));
+        p->id = ntohs(p->id);
+        offset += sizeof(uint16_t);
+
+        // IP du pair
+        memcpy(&p->ip, buffer + offset, 16);
+        offset += 16;
+
+        // PORT du pair
+        memcpy(&p->port_tcp, buffer + offset, sizeof(uint16_t));
+        p->port_tcp = ntohs(p->port_tcp);
+        offset += sizeof(uint16_t);
+
+        // CLE du pair
+        memcpy(p->cle, buffer + offset, 113);
+        offset += 113;
+
+        // Le pair est ajouté à la liste chaînée
+        p->next = NULL;
+        *last_ptr = p;
+        last_ptr = &p->next; // Déplace last_ptr vers le prochain élément
+    }
+
+    return 0; // Succès
+}
+
+
+int parse_msg_7(uint8_t *buffer, size_t buffer_size, struct message_7 *participants) {
+    if (!buffer || !participants || buffer_size < 22) return -1;
+    size_t offset = 0;
+
+    // CODE
+    if (buffer[offset++] != 7) return -1;
+
+    // ID_Q
+    memcpy(&participants->id_q, buffer + offset, sizeof(uint16_t));
+    participants->id_q = ntohs(participants->id_q);
+    offset += sizeof(uint16_t);
+
+    // IP_enchere
+    memcpy(&participants->ip_enchere, buffer + offset, 16);
+    offset += 16;
+
+    // PORT
+    memcpy(&participants->port_enchere, buffer + offset, sizeof(uint16_t));
+    participants->port_enchere = ntohs(participants->port_enchere);
     offset += sizeof(uint16_t);
 
     // NB
-    memcpy(nb_pairs, buffer + offset, sizeof(uint16_t));
-    *nb_pairs = ntohs(*nb_pairs);
+    memcpy(&participants->nb, buffer + offset, sizeof(uint16_t));
+    participants->nb = ntohs(participants->nb);
     offset += sizeof(uint16_t);
 
-    // Parsing des pairs
-    struct peer *head = NULL;
-    struct peer **current = &head;
+    // Liste des peers
+    participants->liste_peers = NULL;
+    msg7_peer **last_ptr = &participants->liste_peers;
 
-    for (int i = 0; i < *nb_pairs; ++i)
-    {
-        if (offset + 2 + 16 + 2 + 113 > buffer_len)
-            break;
+    for (int i = 0; i < participants->nb; ++i) {
+        if (offset + 2 + 16 + 2 + 113 > buffer_size) return -1;
 
-        struct peer *p = malloc(sizeof(struct peer));
-        if (!p)
-            return -1;
+        msg7_peer *p = malloc(sizeof(msg7_peer));
+        if (!p) return -1;
 
         // ID
         memcpy(&p->id, buffer + offset, sizeof(uint16_t));
@@ -603,8 +593,8 @@ int parse_msg_7(uint8_t *buffer, size_t buffer_len, uint16_t *id_q,
         offset += 16;
 
         // PORT
-        memcpy(&p->port_tcp, buffer + offset, sizeof(uint16_t));
-        p->port_tcp = ntohs(p->port_tcp);
+        memcpy(&p->port, buffer + offset, sizeof(uint16_t));
+        p->port = ntohs(p->port);
         offset += sizeof(uint16_t);
 
         // CLE
@@ -612,13 +602,95 @@ int parse_msg_7(uint8_t *buffer, size_t buffer_len, uint16_t *id_q,
         offset += 113;
 
         p->next = NULL;
-        *current = p;
-        current = &p->next;
+        *last_ptr = p;
+        last_ptr = &p->next;
     }
 
-    *liste_out = head;
     return 0;
 }
+
+void free_msg7 (struct message_7 *info) {
+    if (!info) return;
+
+    msg7_peer *p = info->liste_peers;
+    while (p) {
+        msg7_peer *next = p->next;
+        free(p);
+        p = next;
+    }
+
+    info->liste_peers = NULL;
+}
+
+
+// Fonction pour libérer une liste de 'peer'
+void free_peer_list(struct peer *list) {
+    struct peer *current = list;
+    struct peer *next;
+
+    while (current != NULL) {
+        next = current->next;  // Sauvegarder l'élément suivant
+        free(current);  // Libérer l'élément actuel
+        current = next;  // Passer à l'élément suivant
+    }
+}
+
+#define HEADER_SIZE 22
+#define PEER_ENTRY_SIZE 133
+
+int recv_full(int sock, uint8_t *buffer, size_t size) {
+    size_t total_received = 0;
+    while (total_received < size) {
+        ssize_t len = recv(sock, buffer + total_received, size - total_received, 0);
+        if (len <= 0) {
+            perror("recv");
+            return -1;
+        }
+        total_received += len;
+    }
+    return 0;
+}
+
+int receive_msg7(int socket_P, struct message_7 *msg7) {
+    uint8_t header[HEADER_SIZE];
+
+    // Étape 1 : lire l'en-tête
+    if (recv_full(socket_P, header, HEADER_SIZE) != 0)
+        return -1;
+
+    // Lire NB (nombre de pairs)
+    uint16_t nb;
+    memcpy(&nb, header + 20, sizeof(uint16_t));
+    nb = ntohs(nb);
+
+    // Taille totale
+    size_t total_size = HEADER_SIZE + nb * PEER_ENTRY_SIZE;
+    uint8_t *full_msg = malloc(total_size);
+    if (!full_msg) {
+        perror("malloc");
+        return -1;
+    }
+
+    // Copier l'en-tête déjà lu
+    memcpy(full_msg, header, HEADER_SIZE);
+
+    // Étape 2 : lire le reste
+    if (recv_full(socket_P, full_msg + HEADER_SIZE, total_size - HEADER_SIZE) != 0) {
+        free(full_msg);
+        return -1;
+    }
+
+    // Étape 3 : parse
+    if (parse_msg_7(full_msg, total_size, msg7) != 0) {
+        fprintf(stderr, "Erreur de parsing du message 7.\n");
+        free(full_msg);
+        return -1;
+    }
+
+    free(full_msg);
+    return 0;
+}
+
 
 // void envoyer_info_auction(int socket, uint16_t id, uint32_t numv, uint32_t prix,
 //                           const unsigned char *message, size_t message_len,

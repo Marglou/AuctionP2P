@@ -11,24 +11,16 @@
 #define GROUP "ff15::abcd"
 #define BUF_SIZE 1024
 
-#define PORT_ENCHERE 12366
-#define GROUP_ENCHERE "ff15::efgh"
-
 #define MAX_ENCHERES 5
 #define MAX_PEERS 5
 
-
-// typedef struct {
-//     int sock;
-//     char group[INET6_ADDRSTRLEN];
-//     int id_enchere;
-// } EnchereSocket;
-
 typedef struct {
-    int sock;
-    char group[INET6_ADDRSTRLEN];
-    int id_enchere;
-
+    int sock;           // Socket de l'enchère
+    // char group[INET6_ADDRSTRLEN];  // Groupe de l'enchère
+    struct in6_addr group; // Adresse IPv6 du groupe d'enchère
+    int id_enchere;     // ID de l'enchère
+    int port_enchere; // Port de l'enchère
+    int nb_pairs; // Nombre de pairs dans l'enchère
     struct peer *liste_participants; // Liste des pairs de cette enchère
 } EnchereSocket;
 
@@ -39,13 +31,13 @@ typedef struct {
 } Peer;
 
 // Structure for the peer list
-struct peer {
+typedef struct peer {
     uint16_t id;
     struct in6_addr ip;
     uint16_t port_tcp;
     unsigned char cle[113];
     struct peer *next;
-};
+}peer;
 
 // Structure pour stocker les informations d'un pair
 struct peer_info {
@@ -65,7 +57,6 @@ extern int enchere_active; // Index dans encheres[]
 extern int cpt; // Compteur pour les enchères qu'il a initié
 extern int id_peer; 
 extern int global_sock; // Socket global
-extern char nom[100]; // Nom du pair
 extern int global_iface_index; // Index de l'interface réseau
 
 extern int socket_tcp; // Socket TCP pour la connexion
@@ -89,6 +80,7 @@ void *peer_receiver(void *arg);
 void handle_sigint(int sig);
 
 int generer_id_peer();
+int generate_random_port();
 
 int create_tcp_socket_serveur();
 int create_tcp_socket_client(const char *ip_dest, int port_dest);

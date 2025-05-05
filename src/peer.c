@@ -30,7 +30,6 @@ int cpt = 0 ; // Compteur pour les enchères qu'il a initié
 int id_peer = -1;
 
 int global_sock = -1;
-char nom[100];
 int global_iface_index = 0;
 
 int socket_tcp = -1; // Socket TCP pour la connexion
@@ -43,7 +42,7 @@ size_t num_peers = 0;
 int is_superviseur=0;
 int enchere_supervise=0;
 
-char * pseudo;
+char * pseudo; // Pseudo du pair
 
 // Gestion de la déconnexion propre avec Ctrl+C
 void handle_sigint(int sig)
@@ -51,7 +50,7 @@ void handle_sigint(int sig)
     // utiliser sig pour enlever les warnings
     (void)sig;
     char leave_msg[BUF_SIZE];
-    snprintf(leave_msg, sizeof(leave_msg), "[LEAVE] %s a quitté le groupe.\n", nom);
+    snprintf(leave_msg, sizeof(leave_msg), "[LEAVE] %s a quitté le groupe.\n", pseudo);
 
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
@@ -65,9 +64,11 @@ void handle_sigint(int sig)
     close(global_sock);
     close(socket_tcp);
     for (int i = 0; i < nb_encheres; i++) {
+        free_peer_list(encheres[i].liste_participants);
         close(encheres[i].sock);
     }
 
+    free(pseudo);
     exit(0);
 }
 
@@ -104,7 +105,6 @@ void *peer_receiver(void *arg){
                 dest_tcp.sin6_port = port_tcp_dest;  // Utiliser le port du serveur
                 dest_tcp.sin6_addr = src.sin6_addr;  // Utiliser l'adresse IP du pair
 
-                
                 if (IN6_IS_ADDR_LINKLOCAL(&src.sin6_addr)) {
                     dest_tcp.sin6_scope_id = global_iface_index;  // Spécifier l'index de l'interface
                 }
@@ -138,7 +138,6 @@ void *peer_receiver(void *arg){
                 
             }
 
-
             // Traitement texte normal
             printf("%s", buffer);
             fflush(stdout);
@@ -152,11 +151,11 @@ void *peer_receiver(void *arg){
                     sscanf(sig_str + 2 * i, "%2hhx", &sig[i]);
                 }
 
-                EVP_PKEY *peer_pubkey = get_peer_pubkey(nom);
+                EVP_PKEY *peer_pubkey = get_peer_pubkey(pseudo);
                 if (peer_pubkey && verify_message(peer_pubkey, (unsigned char *)msg, strlen(msg), sig, siglen)) {
-                    printf("Message validé par %s\n", nom);
+                    printf("Message validé par %s\n", pseudo);
                 } else {
-                    printf("Échec de la vérification du message de %s\n", nom);
+                    printf("Échec de la vérification du message de %s\n", pseudo);
                 }
             }
         }
@@ -176,9 +175,12 @@ void peer_start(const char *nom, const char *interface){
 
     // // Générer l'ID du pair
     id_peer = generer_id_peer();
-    pseudo = nom;
-    // memcpy(pseudo, nom, sizeof(nom));
-
+    pseudo = strdup(nom);
+    if (pseudo == NULL) {  // Vérifier si l'allocation a réussi
+        perror("Erreur d'allocation mémoire pour le pseudo");
+        exit(EXIT_FAILURE);
+    }
+    
     // --------------------------------------------------------------------
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sock < 0){
@@ -229,7 +231,6 @@ void peer_start(const char *nom, const char *interface){
     sendto(sock, join_msg, strlen(join_msg), 0, (struct sockaddr *)&dest, sizeof(dest));
     // --------------------------------------------------------------------------------------------
     
-
     // socket TCP
     socket_tcp = create_tcp_socket_serveur();
     if (socket_tcp < 0) {
@@ -246,7 +247,6 @@ void peer_start(const char *nom, const char *interface){
     pthread_create(&tcp_thread, NULL, listen_tcp_thread, &listener_tcp);
 
     // --------------------------------------------------------------------------------
-
 
     // Envoi des messages
     char buffer[BUF_SIZE];
@@ -270,7 +270,7 @@ void peer_start(const char *nom, const char *interface){
         }
         else {
             char msg[BUF_SIZE];
-            snprintf(msg, sizeof(msg), "[%200.s] %800.s", nom, buffer);
+            snprintf(msg, sizeof(msg), "[%s] %s", nom, buffer);
             if (strlen(msg) >= sizeof(msg)) {
                 fprintf(stderr, "Erreur : le message est trop long pour le tampon.\n");
             }
@@ -278,8 +278,10 @@ void peer_start(const char *nom, const char *interface){
             if (enchere_active >= 0) {
                 struct sockaddr_in6 dest = {0};
                 dest.sin6_family = AF_INET6;
-                dest.sin6_port = htons(PORT_ENCHERE);
-                inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
+                dest.sin6_port = htons(encheres[enchere_active].port_enchere);
+                // dest.sin6_port = htons(PORT_ENCHERE);
+                // inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
+                memcpy(&dest.sin6_addr, &encheres[enchere_active].group, sizeof(struct in6_addr));
                 dest.sin6_scope_id = global_iface_index;
         
                 sendto(encheres[enchere_active].sock, msg, strlen(msg), 0,

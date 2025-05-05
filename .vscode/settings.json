@@ -8,7 +8,9 @@
         "if.h": "c",
         "socket.h": "c",
         "sha.h": "c",
-        "enchere.h": "c"
+        "enchere.h": "c",
+        "string.h": "c",
+        "superviseur.h": "c"
     },
     "github.copilot.enable": {
         "*": true,

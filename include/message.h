@@ -132,6 +132,21 @@ struct message_6 {
     unsigned char cle[113];  // Clé publique ED25519 de P (113 octets)
 };
 
+typedef struct msg7_peer {
+    uint16_t id;
+    struct in6_addr ip;
+    uint16_t port;
+    unsigned char cle[113];
+    struct msg7_peer *next;
+} msg7_peer;
+
+typedef struct message_7 {
+    uint16_t id_q;
+    struct in6_addr ip_enchere;
+    uint16_t port_enchere;
+    uint16_t nb;
+    msg7_peer *liste_peers;
+} message_7;
 
 struct message_8 {
     uint8_t code;     // = 8
@@ -157,10 +172,14 @@ int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp,
 int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct);
 
 int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pairs);
-int parse_msg_7(uint8_t *buffer, size_t buffer_len, uint16_t *id_q, struct in6_addr *ip_enchere, uint16_t *port_enchere,
-                uint16_t *nb_pairs, struct peer **liste_out);
+int parse_msg_7(uint8_t *buffer, size_t buffer_size, message_7 *result);
+void free_msg7 (struct message_7 *info);
+void free_peer_list(struct peer *list);
+int recv_full(int sock, uint8_t *buffer, size_t size);
+int receive_msg7(int socket_P, struct message_7 *msg7);
+int decode_message_7(uint8_t *buffer, size_t buffer_size);
 
-                
+    
 int msg_8(uint8_t *msg, uint16_t id,uint32_t numv,uint32_t prix);
 
 int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);

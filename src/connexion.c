@@ -19,6 +19,7 @@
 #include "../include/message.h"
 #include "../include/enchere.h"
 
+
 void *listen_tcp_thread(void *arg) {
     struct tcp_listener_state *state = arg;
 
@@ -126,11 +127,9 @@ void *listen_tcp_thread(void *arg) {
                                 discovered_peers[position_enr].id = new_id;
                             }
                         }
-
-                        //  ENVOI MSG 7 à P
         
                         // Envoi du message 7 à P pour rejoindre l'enchere
-                        uint8_t buffer[4096];
+                        uint8_t buffer[BUF_SIZE];
                         // GERE LE NOMBRE
                         int taille = msg_7(buffer, sizeof(buffer), encheres[0], 1);
                         if (taille < 0) {
@@ -139,7 +138,7 @@ void *listen_tcp_thread(void *arg) {
                             return -1;
                         }
 
-                        printf("Envoi du message 7 à P\n");
+                        // printf("Envoi du message 7 à P\n");
                         if (send(client_sock, buffer, taille, 0) < 0) {
                             perror("Erreur d'envoi du message");
                             close(client_sock);
