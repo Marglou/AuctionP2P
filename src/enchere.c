@@ -52,16 +52,8 @@ int join_enchere(int id,  char *group)
 
     struct sockaddr_in6 addr = {0};
     addr.sin6_family = AF_INET6;
-    // addr.sin6_port = htons(PORT_ENCHERE);
     addr.sin6_port = htons(encheres[enchere_active].port_enchere); // Port de l'enchère
-    // addr.sin6_addr = in6addr_any;
-    if (inet_pton(AF_INET6, group, &addr.sin6_addr) != 1) {
-        perror("inet_pton (group enchere)");
-        close(sock);
-        return -1;
-    }
-    printf("adresse : %s\n", group);
-    printf("port : %d\n", ntohs(addr.sin6_port));
+
     if (IN6_IS_ADDR_LINKLOCAL(&addr.sin6_addr))
     {
         addr.sin6_scope_id = global_iface_index; // Spécifier l'index de l'interface
@@ -133,7 +125,10 @@ int join_enchere(int id,  char *group)
         return -1;
     }
 
+    printf("nb encheres : %d\n", nb_encheres);
     nb_encheres++;
+    printf("Vous avez rejoint l'enchère %d sur %s\n", id, group);
+    printf("nb encheres : %d\n", nb_encheres);
     return 0;  // Succès
 }
 
@@ -165,12 +160,6 @@ void creer_enchere()
     }
     encheres[enchere_active].group = group_addr;
     encheres[enchere_active].port_enchere = generate_random_port(); // Port de l'enchère
-    // Join the auction group first
-    if (join_enchere(auction_num_id, auction_group) != 0)
-    {
-        fprintf(stderr, "Erreur lors de la création de l'enchère.\n");
-        return;
-    }
 
     // Create and send message 8 (auction initiation)
     uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
@@ -182,8 +171,16 @@ void creer_enchere()
     if (scanf("%d", &initial_price) != 1) {
         fprintf(stderr, "Erreur : entrée invalide pour le prix.\n");
     }
+    
     if(msg_8(msg,peer_id,numv,initial_price)!=11){
         printf("Erreur message 8");
+    }
+
+    // Join the auction group first
+    if (join_enchere(auction_num_id, auction_group) != 0)
+    {
+        fprintf(stderr, "Erreur lors de la création de l'enchère.\n");
+        return;
     }
 
     // Send the message to the auction group

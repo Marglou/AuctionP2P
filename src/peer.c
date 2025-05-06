@@ -279,8 +279,6 @@ void peer_start(const char *nom, const char *interface){
                 struct sockaddr_in6 dest = {0};
                 dest.sin6_family = AF_INET6;
                 dest.sin6_port = htons(encheres[enchere_active].port_enchere);
-                // dest.sin6_port = htons(PORT_ENCHERE);
-                // inet_pton(AF_INET6, encheres[enchere_active].group, &dest.sin6_addr);
                 memcpy(&dest.sin6_addr, &encheres[enchere_active].group, sizeof(struct in6_addr));
                 dest.sin6_scope_id = global_iface_index;
         
