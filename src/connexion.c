@@ -13,6 +13,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+
 #include "../include/connexion.h"
 #include "../include/peer.h"
 #include "../include/superviseur.h"
@@ -135,14 +136,14 @@ void *listen_tcp_thread(void *arg) {
                         if (taille < 0) {
                             fprintf(stderr, "Erreur de création du message.\n");
                             close(client_sock);
-                            return -1;
+                            return NULL;
                         }
 
                         // printf("Envoi du message 7 à P\n");
                         if (send(client_sock, buffer, taille, 0) < 0) {
                             perror("Erreur d'envoi du message");
                             close(client_sock);
-                            return -1;
+                            return NULL;
                         }
                         printf("Message 7 envoyé à P SUCCES.\n");
                         close(client_sock);

@@ -301,13 +301,10 @@ void peer_start(const char *nom, const char *interface){
     close(socket_tcp);
 }
 
-
 int generer_id_peer() {
     srand(time(NULL)); // Initialiser le générateur de nombres aléatoires
     return ((int)rand()%25);
 }
-
-
 
 // ------------------- TCP ------------------------------------------
 
