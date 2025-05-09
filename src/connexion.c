@@ -131,6 +131,7 @@ void *listen_tcp_thread(void *arg) {
         
                         // Envoi du message 7 à P pour rejoindre l'enchere
                         uint8_t buffer[BUF_SIZE];
+                        memset(buffer, 0, sizeof(buffer));
                         // GERE LE NOMBRE
                         int taille = msg_7(buffer, sizeof(buffer), encheres[0], 1);
                         if (taille < 0) {

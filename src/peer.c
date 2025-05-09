@@ -100,7 +100,8 @@ void *peer_receiver(void *arg){
                 inet_ntop(AF_INET6, &src.sin6_addr, ip_str, sizeof(ip_str));  // Convertir l'adresse IP en chaîne
                 
                 // Création de la structure sockaddr_in6 pour la connexion TCP
-                struct sockaddr_in6 dest_tcp = {0};
+                struct sockaddr_in6 dest_tcp;
+                memset(&dest_tcp, 0, sizeof(dest_tcp));
                 dest_tcp.sin6_family = AF_INET6;
                 dest_tcp.sin6_port = port_tcp_dest;  // Utiliser le port du serveur
                 dest_tcp.sin6_addr = src.sin6_addr;  // Utiliser l'adresse IP du pair
@@ -192,10 +193,11 @@ void peer_start(const char *nom, const char *interface){
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
 
-    struct sockaddr_in6 addr = {0};
+    struct sockaddr_in6 addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sin6_family = AF_INET6;
     addr.sin6_port = htons(PORT);
-    addr.sin6_addr = in6addr_any;
+    addr.sin6_addr = in6addr_any; 
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0){
         perror("bind");
         exit(EXIT_FAILURE);
@@ -204,7 +206,10 @@ void peer_start(const char *nom, const char *interface){
     struct ipv6_mreq mreq;
     inet_pton(AF_INET6, GROUP, &mreq.ipv6mr_multiaddr);
     mreq.ipv6mr_interface = iface_index;
-    setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq));
+    if(setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) < 0){
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
 
     // Infos globales pour SIGINT
     global_iface_index = iface_index;
@@ -222,7 +227,8 @@ void peer_start(const char *nom, const char *interface){
     snprintf(join_msg, sizeof(join_msg), "[JOIN] %s a rejoint le groupe.\n", nom);
 
     // ------------------------------------------------------------------------------------------
-    struct sockaddr_in6 dest = {0};
+    struct sockaddr_in6 dest;
+    memset(&dest, 0, sizeof(dest));
     dest.sin6_family = AF_INET6;
     dest.sin6_port = htons(PORT);
     inet_pton(AF_INET6, GROUP, &dest.sin6_addr);
@@ -327,7 +333,8 @@ int create_tcp_socket_serveur() {
 
     port_tcp = generate_random_port();
 
-    struct sockaddr_in6 addr = {0};
+    struct sockaddr_in6 addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sin6_family = AF_INET6;
     addr.sin6_port = htons(port_tcp); 
     addr.sin6_addr = in6addr_any;

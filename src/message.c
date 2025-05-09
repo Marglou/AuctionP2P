@@ -393,157 +393,122 @@ int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct)
 
 // --------------------------- CODE 7 -----------------------------------------------
 
-int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pairs)
-{
-    if (!buffer || buffer_size < 22)
-        return -1; // 22 = taille minimale du préfixe
+int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pairs) {
+    if (!buffer || buffer_size < 22) {
+        fprintf(stderr, "Buffer too small for message 7 (need at least 22 bytes, got %zu)\n", buffer_size);
+        return -1;
+    }
 
     size_t offset = 0;
 
     // CODE = 7
     buffer[offset++] = 7;
 
-    // ID_Q
-    uint16_t id_q_net = htons(q.id_enchere);
-    memcpy(buffer + offset, &id_q_net, sizeof(uint16_t));
+    // Debug print the multicast address before sending
+    char str_ip[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &q.group, str_ip, INET6_ADDRSTRLEN);
+    printf("Debug - Preparing message 7 with multicast address: %s\n", str_ip);
+
+    // Verify this is a valid multicast address before sending
+    if (!IN6_IS_ADDR_MULTICAST(&q.group)) {
+        fprintf(stderr, "Invalid multicast address in msg_7: %s\n", str_ip);
+        return -1;
+    }
+
+    // ID_Q (2 octets)
+    uint16_t id_net = htons(q.id_enchere);
+    memcpy(buffer + offset, &id_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // IP_enchere
-    memcpy(buffer + offset, &q.group, 16);
-    offset += 16;
+    // IP_enchere (16 octets) - Copy the multicast address
+    memcpy(buffer + offset, &q.group, sizeof(struct in6_addr));
+    offset += sizeof(struct in6_addr);
 
-    // PORT faire une recherche pour donner le port associé à la bonne enchère
-    q.port_enchere = encheres[enchere_active].port_enchere; // Convertir le port en big-endian
-    // printf("Port enchere : %d\n", q.port_enchere);
-    // uint16_t port_net = htons(ntohs(((struct sockaddr_in6 *)&q.sock)->sin6_port)); // facultatif
+    // PORT (2 octets)
     uint16_t port_net = htons(q.port_enchere);
-    // printf("Port enchere : %d\n", ntohs(port_net));
-
     memcpy(buffer + offset, &port_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // NB
+    // NB (2 octets)
     uint16_t nb_net = htons(nb_pairs);
     memcpy(buffer + offset, &nb_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // Pour chaque pair
-    struct peer *p = q.liste_participants;
-    while (p && nb_pairs > 0)
-    {
-        if (offset + 2 + 16 + 2 + 113 > buffer_size)
-            return -1; // sécurité
+    // Debug print final message details
+    printf("Debug - Message 7 details:\n");
+    printf("  - ID_Q: %d\n", q.id_enchere);
+    printf("  - Multicast address: %s\n", str_ip);
+    printf("  - Port: %d\n", q.port_enchere);
+    printf("  - Number of peers: %d\n", nb_pairs);
+    printf("  - Total message size: %zu bytes\n", offset);
 
-        // ID
-        uint16_t id_net = htons(p->id);
-        memcpy(buffer + offset, &id_net, sizeof(uint16_t));
-        offset += sizeof(uint16_t);
-
-        // IP
-        memcpy(buffer + offset, &p->ip, 16);
-        offset += 16;
-
-        // PORT
-        uint16_t portp_net = htons(p->port_tcp);
-        memcpy(buffer + offset, &portp_net, sizeof(uint16_t));
-        offset += sizeof(uint16_t);
-
-        // CLE (113 octets fixes)
-        memcpy(buffer + offset, p->cle, 113);
-        offset += 113;
-
-        p = p->next;
-        nb_pairs--;
-    }
-
-    return offset; // taille totale du message
+    return offset; // Return the actual size of the message
 }
 
 int decode_message_7(uint8_t *buffer, size_t buffer_size) {
     if (!buffer || buffer_size < 22) {
-        return -1; // Taille insuffisante
+        fprintf(stderr, "Buffer too small for message 7 (need at least 22 bytes, got %zu)\n", buffer_size);
+        return -1;
     }
 
     size_t offset = 0;
 
     // CODE = 7 (vérification de l'entête)
     uint8_t code = buffer[offset++];
-    if (code != 7) return -1; // Le code ne correspond pas
-
-    // ID_Q
-    memcpy(&encheres[enchere_active].id_enchere, buffer + offset, sizeof(uint16_t));
-    encheres[enchere_active].id_enchere = ntohs(encheres[enchere_active].id_enchere);
-    offset += sizeof(uint16_t);
-
-    // IP_enchere
-    memcpy(&encheres[enchere_active].group, buffer + offset, 16);
-    offset += 16;
-
-    // PORT
-    memcpy(&encheres[enchere_active].port_enchere, buffer + offset, sizeof(uint16_t));
-    encheres[enchere_active].port_enchere = ntohs(encheres[enchere_active].port_enchere);
-    offset += sizeof(uint16_t);
-
-    
-    // Affichage des données décodées
-    // printf("ID Enchère: %d\n", participants->id_enchere);
-
-    // Affichage de l'IP en format IPv6
-    char str_ip[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &encheres[enchere_active].group, str_ip, INET6_ADDRSTRLEN);
-    // printf("Adresse IPv6 du groupe: %s\n", str_ip);
-    // printf("Port Enchère: %d\n", participants->port_enchere);
-    //  ESSAYER DE SE CONNECTER A L'ENCHERE
-    // if (join_enchere(encheres[enchere_active].id_enchere, str_ip) != 0) {
-    //     fprintf(stderr, "Erreur lors de la connexion à l'enchère\n");
-    //     return -1;
-    // }
-
-    // NB (nombre de pairs)
-    memcpy(&encheres[enchere_active].nb_pairs, buffer + offset, sizeof(uint16_t));
-    encheres[enchere_active].nb_pairs = ntohs(encheres[enchere_active].nb_pairs);
-    offset += sizeof(uint16_t);
-
-    // Liste des peers
-    encheres[enchere_active].liste_participants = NULL; // Initialiser la liste des pairs à NULL
-    peer **last_ptr = &encheres[enchere_active].liste_participants; // Pointeur pour insérer de nouveaux éléments dans la liste
-
-    for (int i = 0; i < encheres[enchere_active].nb_pairs; ++i) {
-        if (offset + 2 + 16 + 2 + 113 > buffer_size) {
-            return -1; // Taille insuffisante pour un pair
-        }
-
-        // Allocation mémoire pour un nouveau pair
-        peer *p = malloc(sizeof(peer));
-        if (!p) {
-            return -1; // Échec de l'allocation mémoire
-        }
-
-        // ID du pair
-        memcpy(&p->id, buffer + offset, sizeof(uint16_t));
-        p->id = ntohs(p->id);
-        offset += sizeof(uint16_t);
-
-        // IP du pair
-        memcpy(&p->ip, buffer + offset, 16);
-        offset += 16;
-
-        // PORT du pair
-        memcpy(&p->port_tcp, buffer + offset, sizeof(uint16_t));
-        p->port_tcp = ntohs(p->port_tcp);
-        offset += sizeof(uint16_t);
-
-        // CLE du pair
-        memcpy(p->cle, buffer + offset, 113);
-        offset += 113;
-
-        // Le pair est ajouté à la liste chaînée
-        p->next = NULL;
-        *last_ptr = p;
-        last_ptr = &p->next; // Déplace last_ptr vers le prochain élément
+    if (code != 7) {
+        fprintf(stderr, "Invalid message code: %d (expected 7)\n", code);
+        return -1;
     }
 
-    return 0; // Succès
+    // ID_Q
+    uint16_t id_q;
+    memcpy(&id_q, buffer + offset, sizeof(uint16_t));
+    id_q = ntohs(id_q);
+    offset += sizeof(uint16_t);
+
+    // IP_enchere - Copy the multicast address
+    struct in6_addr multicast_addr;
+    memcpy(&multicast_addr, buffer + offset, sizeof(struct in6_addr));
+    offset += sizeof(struct in6_addr);
+
+    // Debug print before validation
+    char str_ip[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &multicast_addr, str_ip, INET6_ADDRSTRLEN);
+    printf("Debug - Raw multicast address from message: %s\n", str_ip);
+
+    // Verify this is a valid multicast address
+    if (!IN6_IS_ADDR_MULTICAST(&multicast_addr)) {
+        fprintf(stderr, "Invalid multicast address in message 7: %s\n", str_ip);
+        return -1;
+    }
+
+    // PORT
+    uint16_t port;
+    memcpy(&port, buffer + offset, sizeof(uint16_t));
+    port = ntohs(port);
+    offset += sizeof(uint16_t);
+
+    // NB (nombre de pairs)
+    uint16_t nb_pairs;
+    memcpy(&nb_pairs, buffer + offset, sizeof(uint16_t));
+    nb_pairs = ntohs(nb_pairs);
+    offset += sizeof(uint16_t);
+
+    // Store the values in the encheres array
+    encheres[enchere_active].id_enchere = id_q;
+    memcpy(&encheres[enchere_active].group, &multicast_addr, sizeof(struct in6_addr));
+    encheres[enchere_active].port_enchere = port;
+    encheres[enchere_active].nb_pairs = nb_pairs;
+
+    // Debug print after validation
+    inet_ntop(AF_INET6, &encheres[enchere_active].group, str_ip, INET6_ADDRSTRLEN);
+    printf("Debug - Message 7 decoded successfully:\n");
+    printf("  - ID_Q: %d\n", encheres[enchere_active].id_enchere);
+    printf("  - Multicast address: %s\n", str_ip);
+    printf("  - Port: %d\n", encheres[enchere_active].port_enchere);
+    printf("  - Number of peers: %d\n", encheres[enchere_active].nb_pairs);
+
+    return 0;
 }
 
 
