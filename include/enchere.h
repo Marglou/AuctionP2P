@@ -6,8 +6,6 @@
 
 
 void creer_enchere();
-// void join_enchere(int id, const char *group);
-// int join_enchere(int id,  char *group);
 int join_enchere(int id, char *group, uint16_t port);
 
 void faire_offre(uint32_t prix);

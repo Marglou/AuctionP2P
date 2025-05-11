@@ -24,12 +24,6 @@ typedef struct {
     struct peer *liste_participants; // Liste des pairs de cette enchère
 } EnchereSocket;
 
-
-typedef struct {
-    char name[100];
-    EVP_PKEY *pubkey;
-} Peer;
-
 // Structure for the peer list
 typedef struct peer {
     uint16_t id;
@@ -38,6 +32,13 @@ typedef struct peer {
     unsigned char cle[113];
     struct peer *next;
 }peer;
+
+typedef struct {
+    char name[100];
+    EVP_PKEY *pubkey;
+} Peer;
+
+
 
 // Structure pour stocker les informations d'un pair
 struct peer_info {
@@ -81,6 +82,7 @@ void handle_sigint(int sig);
 
 int generer_id_peer();
 int generate_random_port();
+void free_peer_list(struct peer *head);
 
 int create_tcp_socket_serveur();
 int create_tcp_socket_client(const char *ip_dest, int port_dest);
@@ -88,6 +90,6 @@ int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index)
 
 // Peer management functions
 // int find_peer_id(struct peer *p, uint16_t *id, bool find_free);
-// int add_peer(struct peer *p, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle);
+int add_peer(struct peer **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle);
 
 #endif // PEER_H

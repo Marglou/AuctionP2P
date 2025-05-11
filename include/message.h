@@ -172,14 +172,12 @@ int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp,
 int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct);
 
 int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pairs);
-int parse_msg_7(uint8_t *buffer, size_t buffer_size, message_7 *result);
-void free_msg7 (struct message_7 *info);
-void free_peer_list(struct peer *list);
-int recv_full(int sock, uint8_t *buffer, size_t size);
-int receive_msg7(int socket_P, struct message_7 *msg7);
 int decode_message_7(uint8_t *buffer, size_t buffer_size);
+int message_7_header(uint8_t *buffer, size_t buffer_size, EnchereSocket q);
+void envoyer_infos_peers(int socket, EnchereSocket *enchere);
+int recevoir_message_7_header(int socket, EnchereSocket *enchere);
+int recevoir_infos_peer(int socket, EnchereSocket *enchere);
 
-    
 int msg_8(uint8_t *msg, uint16_t id,uint32_t numv,uint32_t prix);
 
 int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
@@ -190,9 +188,11 @@ void envoyer_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t 
 void envoyer_finalisation_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t prix);
 void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t numv, uint16_t *ids_disparus, uint16_t nb);
 void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix);
-void envoyer_validation_complet(int socket, uint16_t id, const unsigned char *message, size_t message_len, const unsigned char *private_key);
-void envoyer_info_auction(int socket, uint16_t id, uint32_t numv, uint32_t prix, 
-                         const unsigned char *message, size_t message_len,
-                         const unsigned char *signature);
+// void envoyer_validation_complet(int socket, uint16_t id, const unsigned char *message, size_t message_len, const unsigned char *private_key);
+// void envoyer_info_auction(int socket, uint16_t id, uint32_t numv, uint32_t prix, 
+//                          const unsigned char *message, size_t message_len,
+//                          const unsigned char *signature);
+int get_adresse_perso_from_socket(int sock, struct in6_addr *addr);
+
 
 #endif // MESSAGE_H

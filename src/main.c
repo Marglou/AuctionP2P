@@ -13,6 +13,43 @@
 EVP_PKEY *my_privkey = NULL;
 EVP_PKEY *my_pubkey = NULL;
 
+
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+
+char *get_active_interface() {
+    struct ifaddrs *ifaddr, *ifa;
+    static char interface_name[IF_NAMESIZE]; // Stocke le nom de l'interface
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return NULL;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) {
+            continue;
+        }
+
+        // Vérifier si l'interface est de type AF_INET6 (IPv6)
+        if (ifa->ifa_addr->sa_family == AF_INET6) {
+            // Vérifier si l'interface est active et non loopback
+            if ((ifa->ifa_flags & IFF_UP) && !(ifa->ifa_flags & IFF_LOOPBACK)) {
+                strncpy(interface_name, ifa->ifa_name, IF_NAMESIZE - 1);
+                interface_name[IF_NAMESIZE - 1] = '\0'; // Assurer la terminaison
+                freeifaddrs(ifaddr);
+                return interface_name;
+            }
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    return NULL; // Aucune interface active trouvée
+}
 void init_openssl()
 {
     SSL_library_init();           // Ancienne API, toujours utile pour compatibilité
@@ -75,9 +112,17 @@ int main() {
 
     register_peer(nom, my_pubkey);
 
+    char *interface = get_active_interface();
+    if (!interface) {
+        fprintf(stderr, "Erreur : aucune interface réseau active trouvée.\n");
+        return 1;
+    }
+
+    // printf("Interface réseau active : %s\n", interface);
+    peer_start(nom, interface);
     // peer_start(nom, "en0");  // Pour MAC
     // peer_start(nom, "eth0");  
-    peer_start(nom, "enp0s3");
+    // peer_start(nom, "enp0s3");
 
     cleanup_superviseur();
     EVP_PKEY_free(my_privkey);

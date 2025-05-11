@@ -20,6 +20,21 @@
 #include "../include/message.h"
 #include "../include/enchere.h"
 
+void print_peer_list(struct peer *head) {
+    struct peer *current = head;
+    int count = 0;
+
+    while (current != NULL) {
+        char ip_str[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, &current->ip, ip_str, sizeof(ip_str));
+        printf("Peer %d: ID=%d, IP=%s, Port=%d\n", ++count, current->id, ip_str, current->port_tcp);
+        current = current->next;
+    }
+
+    if (count == 0) {
+        printf("La liste des participants est vide.\n");
+    }
+}
 
 void *listen_tcp_thread(void *arg) {
     struct tcp_listener_state *state = arg;
@@ -102,7 +117,6 @@ void *listen_tcp_thread(void *arg) {
                         } if (id_exists==false && num_peers < MAX_PEERS) {
                             
                             //uint16_t new_id = 10;  // À définir selon ta logique
-
                             uint8_t msg[1];
                             int msg_len = msg_50(msg);
 
@@ -115,7 +129,6 @@ void *listen_tcp_thread(void *arg) {
                             }
                         }else{
                             uint16_t new_id = (int)rand()%25;  // À définir selon ta logique
-
                             uint8_t msg[3];
                             int msg_len = msg_51(msg, new_id);
 
@@ -123,7 +136,6 @@ void *listen_tcp_thread(void *arg) {
                                 perror("send msg_51");
                             } else {
                                 printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",inet_ntoa(*(struct in_addr *)&parsed_msg.ip),ntohs(parsed_msg.port), new_id);
-
                                 // Ajouter le nouveau pair à la liste
                                 discovered_peers[position_enr].id = new_id;
                             }
@@ -133,19 +145,31 @@ void *listen_tcp_thread(void *arg) {
                         uint8_t buffer[BUF_SIZE];
                         memset(buffer, 0, sizeof(buffer));
                         // GERE LE NOMBRE
-                        int taille = msg_7(buffer, sizeof(buffer), encheres[0], 1);
-                        if (taille < 0) {
-                            fprintf(stderr, "Erreur de création du message.\n");
-                            close(client_sock);
-                            return NULL;
+                        // int taille = msg_7(buffer, sizeof(buffer), encheres[0], 1);
+                        int taille = message_7_header(buffer, sizeof(buffer), encheres[0]);
+                        // Envoi du message 7 à P en plusieurs parties
+                        size_t total_sent = 0;
+                        while (total_sent < taille) {
+                            ssize_t sent = send(client_sock, buffer + total_sent, taille - total_sent, 0);
+                            if (sent < 0) {
+                                perror("Erreur d'envoi du message");
+                                close(client_sock);
+                                return NULL;
+                            }
+                            total_sent += sent;
                         }
 
-                        // printf("Envoi du message 7 à P\n");
-                        if (send(client_sock, buffer, taille, 0) < 0) {
-                            perror("Erreur d'envoi du message");
-                            close(client_sock);
-                            return NULL;
+                        if (total_sent == taille) {
+                            printf("Message 7 header envoyé à P avec succès (%zu octets).\n", total_sent);
+                        } else {
+                            fprintf(stderr, "Erreur : message incomplet envoyé (%zu/%d octets).\n", total_sent, taille);
                         }
+
+                        //  ENVOI des infos des pairs
+                        printf("Envoi des infos des pairs à P...\n");
+                        print_peer_list(encheres[0].liste_participants);
+                        envoyer_infos_peers(client_sock, &encheres[0]);
+
                         printf("Message 7 envoyé à P SUCCES.\n");
                         close(client_sock);
                     }
@@ -153,7 +177,6 @@ void *listen_tcp_thread(void *arg) {
 
             }
                 close(client_sock);
-
             }
             // else if (peekbuf[0] == 0x16) {
             //     // TLS probable

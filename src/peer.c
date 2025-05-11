@@ -410,6 +410,26 @@ int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index)
     return -1;
 }
 
+void free_peer_list(struct peer *head) {
+    if (!head) {
+        return;
+    }
+
+    struct peer *current = head->next;
+    struct peer *temp;
+
+    while (current != head) {
+        temp = current;
+        current = current->next;
+        free(temp);
+    }
+
+    // Libérer la mémoire du nœud principal (tête)
+    free(head);
+}
+
+
+
 // Function to connect to all other peers and send message 6
 // int connect_to_peers_and_send_info(struct peer *p, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
 //                                  uint16_t new_peer_port, unsigned char *new_peer_cle) {
@@ -545,30 +565,35 @@ int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index)
 //     return -1; // No free ID found
 // }
 
-// int add_peer(struct peer *p, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
-//     if (!p || !cle) return -1;
+int add_peer(struct peer **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
+    if (!head || !cle) return -1;
 
-//     // Check if ID is available
-//     if (find_peer_id(p, &id, false) == 1) {
-//         // ID is taken, find a free one
-//         if (find_peer_id(p, &id, true) != 0) {
-//             return -1; // No free ID found
-//         }
-//     }
+    // Créer un nouveau peer
+    struct peer *new_peer = malloc(sizeof(struct peer));
+    if (!new_peer) {
+        perror("Erreur d'allocation mémoire pour le peer");
+        return -1;
+    }
 
-//     struct peer *new_peer = malloc(sizeof(struct peer));
-//     if (!new_peer) {
-//         return -1;
-//     }
+    // Initialiser les champs du peer
+    new_peer->id = id;
+    new_peer->ip = ip;
+    new_peer->port_tcp = port;
+    memcpy(new_peer->cle, cle, 113);
+    new_peer->next = NULL;
 
-//     new_peer->id = id;
-//     new_peer->ip = ip;
-//     new_peer->port_tcp = port;
-//     memcpy(new_peer->cle, cle, 113);
+    // Ajouter le peer à la liste
+    if (*head == NULL) {
+        // Si la liste est vide, le nouveau peer devient la tête
+        *head = new_peer;
+    } else {
+        // Ajouter le peer à la fin de la liste
+        struct peer *current = *head;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = new_peer;
+    }
 
-//     // Insert at the beginning of the list
-//     new_peer->next = p->next;
-//     p->next = new_peer;
-
-//     return 0;
-// }
+    return 0;
+}

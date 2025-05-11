@@ -18,10 +18,6 @@
 #include "../include/enchere.h"
 #include "../include/connexion.h"
 
-
-
-
-
 // --------------------------- CODE 4 -----------------------------------------------
 int msg_4(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp)
 {
@@ -49,6 +45,32 @@ int msg_4(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp)
     memcpy(&msg[3], &adresse_perso, 16); // Adresse IP
     memcpy(&msg[19], &port_net, 2);      // Port
 
+    return 0;
+}
+
+int get_adresse_perso_from_socket(int sock, struct in6_addr *addr) {
+    if (!addr) {
+        fprintf(stderr, "Erreur : pointeur d'adresse invalide.\n");
+        return -1;
+    }
+
+    struct sockaddr_in6 local_addr;
+    socklen_t addr_len = sizeof(local_addr);
+
+    // Obtenir l'adresse locale associée à la socket
+    if (getsockname(sock, (struct sockaddr *)&local_addr, &addr_len) < 0) {
+        perror("getsockname");
+        return -1;
+    }
+
+    // Vérifier que la socket est IPv6
+    if (local_addr.sin6_family != AF_INET6) {
+        fprintf(stderr, "Erreur : la socket n'est pas de type IPv6.\n");
+        return -1;
+    }
+
+    // Copier l'adresse IPv6 dans le pointeur fourni
+    memcpy(addr, &local_addr.sin6_addr, sizeof(struct in6_addr));
     return 0;
 }
 
@@ -511,151 +533,232 @@ int decode_message_7(uint8_t *buffer, size_t buffer_size) {
     return 0;
 }
 
+int message_7_header(uint8_t *buffer, size_t buffer_size, EnchereSocket q) {
+    if (!buffer || buffer_size < 22) {
+        fprintf(stderr, "Buffer too small for message 7 header (need at least 22 bytes, got %zu)\n", buffer_size);
+        return -1;
+    }
 
-int parse_msg_7(uint8_t *buffer, size_t buffer_size, struct message_7 *participants) {
-    if (!buffer || !participants || buffer_size < 22) return -1;
     size_t offset = 0;
 
-    // CODE
-    if (buffer[offset++] != 7) return -1;
+    // CODE = 7 (1 octet)
+    buffer[offset++] = 7;
 
-    // ID_Q
-    memcpy(&participants->id_q, buffer + offset, sizeof(uint16_t));
-    participants->id_q = ntohs(participants->id_q);
+    // ID_Q (2 octets, réseau)
+    uint16_t id_net = htons(q.id_enchere);
+    memcpy(buffer + offset, &id_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // IP_enchere
-    memcpy(&participants->ip_enchere, buffer + offset, 16);
-    offset += 16;
+    // IP_enchere (16 octets) - Adresse multicast
+    memcpy(buffer + offset, &q.group, sizeof(struct in6_addr));
+    offset += sizeof(struct in6_addr);
 
-    // PORT
-    memcpy(&participants->port_enchere, buffer + offset, sizeof(uint16_t));
-    participants->port_enchere = ntohs(participants->port_enchere);
+    // PORT (2 octets, réseau)
+    uint16_t port_net = htons(q.port_enchere);
+    memcpy(buffer + offset, &port_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // NB
-    memcpy(&participants->nb, buffer + offset, sizeof(uint16_t));
-    participants->nb = ntohs(participants->nb);
+    // NB (2 octets, réseau) - Nombre de pairs
+    uint16_t nb_net = htons(q.nb_pairs);
+    memcpy(buffer + offset, &nb_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // Liste des peers
-    participants->liste_peers = NULL;
-    msg7_peer **last_ptr = &participants->liste_peers;
+    // Debug print
+    char str_ip[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &q.group, str_ip, INET6_ADDRSTRLEN);
+    printf("Debug - Message 7 header created:\n");
+    printf("  - ID_Q: %d\n", q.id_enchere);
+    printf("  - Multicast address: %s\n", str_ip);
+    printf("  - Port: %d\n", q.port_enchere);
+    printf("  - Number of peers: %d\n", q.nb_pairs);
+    printf("  - Total message size: %zu bytes\n", offset);
 
-    for (int i = 0; i < participants->nb; ++i) {
-        if (offset + 2 + 16 + 2 + 113 > buffer_size) return -1;
-
-        msg7_peer *p = malloc(sizeof(msg7_peer));
-        if (!p) return -1;
-
-        // ID
-        memcpy(&p->id, buffer + offset, sizeof(uint16_t));
-        p->id = ntohs(p->id);
-        offset += sizeof(uint16_t);
-
-        // IP
-        memcpy(&p->ip, buffer + offset, 16);
-        offset += 16;
-
-        // PORT
-        memcpy(&p->port, buffer + offset, sizeof(uint16_t));
-        p->port = ntohs(p->port);
-        offset += sizeof(uint16_t);
-
-        // CLE
-        memcpy(p->cle, buffer + offset, 113);
-        offset += 113;
-
-        p->next = NULL;
-        *last_ptr = p;
-        last_ptr = &p->next;
-    }
-
-    return 0;
+    return offset; // Taille totale du message
 }
 
-void free_msg7 (struct message_7 *info) {
-    if (!info) return;
+int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
+    uint8_t buffer[23]; // Taille minimale pour un message_7_header
+    memset(buffer, 0, sizeof(buffer));
 
-    msg7_peer *p = info->liste_peers;
-    while (p) {
-        msg7_peer *next = p->next;
-        free(p);
-        p = next;
-    }
-
-    info->liste_peers = NULL;
-}
-
-
-// Fonction pour libérer une liste de 'peer'
-void free_peer_list(struct peer *list) {
-    struct peer *current = list;
-    struct peer *next;
-
-    while (current != NULL) {
-        next = current->next;  // Sauvegarder l'élément suivant
-        free(current);  // Libérer l'élément actuel
-        current = next;  // Passer à l'élément suivant
-    }
-}
-
-#define HEADER_SIZE 22
-#define PEER_ENTRY_SIZE 133
-
-int recv_full(int sock, uint8_t *buffer, size_t size) {
     size_t total_received = 0;
-    while (total_received < size) {
-        ssize_t len = recv(sock, buffer + total_received, size - total_received, 0);
-        if (len <= 0) {
-            perror("recv");
+
+    // Lire les données jusqu'à ce que 23 octets soient reçus
+    while (total_received < 23) {
+        ssize_t received = recv(socket, buffer + total_received, 23 - total_received, 0);
+        if (received < 0) {
+            perror("Erreur lors de la réception des données TCP");
+            return -1;
+        } else if (received == 0) {
+            fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
             return -1;
         }
-        total_received += len;
+        total_received += received;
     }
+
+    printf("Debug - Total reçu : %zu octets\n", total_received);
+
+    size_t offset = 0;
+
+    // Vérifier le code (1 octet)
+    uint8_t code = buffer[offset++];
+    if (code != 7) {
+        fprintf(stderr, "Erreur : code de message invalide (reçu %d, attendu 7).\n", code);
+        return -1;
+    }
+
+    // Extraire ID_Q (2 octets)
+    uint16_t id_q;
+    memcpy(&id_q, buffer + offset, sizeof(uint16_t));
+    enchere->id_enchere = ntohs(id_q);
+    offset += sizeof(uint16_t);
+
+    // Extraire IP_enchere (16 octets)
+    memcpy(&enchere->group, buffer + offset, sizeof(struct in6_addr));
+    offset += sizeof(struct in6_addr);
+
+    // Extraire PORT (2 octets)
+    uint16_t port;
+    memcpy(&port, buffer + offset, sizeof(uint16_t));
+    enchere->port_enchere = ntohs(port);
+    offset += sizeof(uint16_t);
+
+    // Extraire NB (2 octets)
+    uint16_t nb_pairs;
+    memcpy(&nb_pairs, buffer + offset, sizeof(uint16_t));
+    enchere->nb_pairs = ntohs(nb_pairs);
+    offset += sizeof(uint16_t);
+
+    // Debug print
+    char str_ip[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &enchere->group, str_ip, sizeof(str_ip));
+    printf("Message 7 reçu :\n");
+    printf("  - ID_Q: %d\n", enchere->id_enchere);
+    printf("  - Multicast address: %s\n", str_ip);
+    printf("  - Port: %d\n", enchere->port_enchere);
+    printf("  - Number of peers: %d\n", enchere->nb_pairs);
+
     return 0;
 }
 
-int receive_msg7(int socket_P, struct message_7 *msg7) {
-    uint8_t header[HEADER_SIZE];
-
-    // Étape 1 : lire l'en-tête
-    if (recv_full(socket_P, header, HEADER_SIZE) != 0)
-        return -1;
-
-    // Lire NB (nombre de pairs)
-    uint16_t nb;
-    memcpy(&nb, header + 20, sizeof(uint16_t));
-    nb = ntohs(nb);
-
-    // Taille totale
-    size_t total_size = HEADER_SIZE + nb * PEER_ENTRY_SIZE;
-    uint8_t *full_msg = malloc(total_size);
-    if (!full_msg) {
-        perror("malloc");
-        return -1;
+void envoyer_infos_peers(int socket, EnchereSocket *enchere) {
+    if (!enchere || !enchere->liste_participants) {
+        fprintf(stderr, "Erreur : liste des participants vide ou enchère invalide.\n");
+        return;
     }
 
-    // Copier l'en-tête déjà lu
-    memcpy(full_msg, header, HEADER_SIZE);
+    struct peer *current = enchere->liste_participants;
 
-    // Étape 2 : lire le reste
-    if (recv_full(socket_P, full_msg + HEADER_SIZE, total_size - HEADER_SIZE) != 0) {
-        free(full_msg);
-        return -1;
-    }
+    do {
+        // Préparer le message de 133 octets
+        uint8_t msg[133];
+        size_t offset = 0;
 
-    // Étape 3 : parse
-    if (parse_msg_7(full_msg, total_size, msg7) != 0) {
-        fprintf(stderr, "Erreur de parsing du message 7.\n");
-        free(full_msg);
-        return -1;
-    }
+        // ID (2 octets, réseau)
+        uint16_t id_net = htons(current->id);
+        memcpy(msg + offset, &id_net, sizeof(uint16_t));
+        offset += sizeof(uint16_t);
 
-    free(full_msg);
-    return 0;
+        // IP (16 octets)
+        memcpy(msg + offset, &current->ip, sizeof(struct in6_addr));
+        offset += sizeof(struct in6_addr);
+
+        // Clé publique (113 octets)
+        memcpy(msg + offset, current->cle, 113);
+        offset += 113;
+
+        // Port (2 octets, réseau)
+        uint16_t port_net = htons(current->port_tcp);
+        memcpy(msg + offset, &port_net, sizeof(uint16_t));
+        offset += sizeof(uint16_t);
+
+        // Vérifier que le message est bien de 133 octets
+        if (offset != 133) {
+            fprintf(stderr, "Erreur : taille du message incorrecte (%zu octets, attendu 133).\n", offset);
+            return;
+        }
+
+        // Envoi du message avec while
+        ssize_t sent = 0;
+        while (sent < sizeof(msg)) {
+            ssize_t result = send(socket, msg + sent, sizeof(msg) - sent, 0);
+            if (result < 0) {
+                perror("Erreur lors de l'envoi du message");
+                return;
+            }
+            sent += result;
+        }
+
+        printf("peer ID : %d \n", current->id);
+        // Passer au participant suivant
+        current = current->next;
+        sleep(1); // Pause de 1 seconde entre les envois
+    } while (current != NULL);
+    printf("Tous les pairs ont été envoyés avec succès.\n");
 }
 
+int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
+    if (!enchere) {
+        fprintf(stderr, "Erreur : enchère invalide.\n");
+        return -1;
+    }
+
+    uint8_t buffer[133]; // Taille du message attendu
+    size_t total_received = 0;
+
+    // Lire les données jusqu'à ce que 133 octets soient reçus
+    while (total_received < sizeof(buffer)) {
+        ssize_t received = recv(socket, buffer + total_received, sizeof(buffer) - total_received, 0);
+        if (received < 0) {
+            perror("Erreur lors de la réception des données TCP");
+            return -1;
+        } else if (received == 0) {
+            fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
+            return -1;
+        }
+        total_received += received;
+    }
+
+    printf("Debug - Total reçu : %zu octets\n", total_received);
+
+    // Extraire les informations du peer
+    size_t offset = 0;
+
+    // ID (2 octets)
+    uint16_t id = ntohs(*(uint16_t *)(buffer + offset));
+    offset += sizeof(uint16_t);
+
+    // IP (16 octets)
+    struct in6_addr ip;
+    memcpy(&ip, buffer + offset, sizeof(struct in6_addr));
+    offset += sizeof(struct in6_addr);
+
+    // Clé publique (113 octets)
+    unsigned char cle[113];
+    memcpy(cle, buffer + offset, 113);
+    offset += 113;
+
+    // Port (2 octets)
+    uint16_t port = ntohs(*(uint16_t *)(buffer + offset));
+    offset += sizeof(uint16_t);
+
+    // Vérifier que le message est bien de 133 octets
+    if (offset != 133) {
+        fprintf(stderr, "Erreur : taille du message incorrecte (%zu octets, attendu 133).\n", offset);
+        return -1;
+    }
+
+    // Ajouter le peer à la liste des participants de l'enchère
+    if (add_peer(&enchere->liste_participants, id, ip, port, cle) != 0) {
+        fprintf(stderr, "Erreur lors de l'ajout du peer à la liste des participants.\n");
+        return -1;
+    }
+
+    // Incrémenter le nombre de pairs dans l'enchère
+    enchere->nb_pairs++;
+
+    printf("Peer ajouté avec succès : ID=%d, Port=%d\n", id, port);
+    return 0;
+}
 
 // void envoyer_info_auction(int socket, uint16_t id, uint32_t numv, uint32_t prix,
 //                           const unsigned char *message, size_t message_len,
