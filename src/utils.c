@@ -38,8 +38,8 @@ int get_active_interface() {
     return -1;
 }
 
-void print_peer_list(struct peer *head) {
-    struct peer *current = head;
+void print_peer_list(peer_list *head) {
+    peer_list *current = head;
     int count = 0;
 
     while (current != NULL) {
@@ -129,9 +129,9 @@ int generate_random_port() {
     return (rand() % (MAX_PORT - MIN_PORT + 1)) + MIN_PORT;
 }
 
-void free_peer_list(struct peer *head) {
-    struct peer *current = head;
-    struct peer *temp;
+void free_peer_list(peer_list *head) {
+    peer_list *current = head;
+    peer_list *temp;
 
     while (current != NULL) {
         temp = current;
@@ -236,8 +236,8 @@ int send_UDP (int sock, struct sockaddr_in6 *multicast_addr, char *msg, size_t m
 
 int send_multicast (int sock, char *msg, size_t msg_len) {
     ssize_t sent = sendto(sock, msg, msg_len, 0,
-                          (struct sockaddr *)&adr_liaison.addr,
-                          sizeof(adr_liaison));
+                          (struct sockaddr *)&p.adr_liaison.addr,
+                          sizeof(p.adr_liaison));
     if (sent < 0) {
         perror("sendto multicast");
         return -1;

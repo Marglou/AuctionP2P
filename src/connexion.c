@@ -17,10 +17,10 @@
 
 #include "../include/connexion.h"
 #include "../include/peer.h"
-#include "../include/superviseur.h"
 #include "../include/message.h"
 #include "../include/enchere.h"
 #include "../include/utils.h"
+#include "../include/securite.h"
 
 int connexion_TLS(struct in6_addr ip, uint16_t port) {
     char ip_str[INET6_ADDRSTRLEN];
@@ -91,7 +91,7 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
     dest.sin6_port = htons(port);  // Port is already in network byte order
     dest.sin6_addr = ip;
     if (IN6_IS_ADDR_LINKLOCAL(&ip)) {
-        dest.sin6_scope_id = global_iface_index;
+        dest.sin6_scope_id = p.global_iface_index;
     }
 
     // Connect
@@ -133,9 +133,9 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
         // printf("CLE (113 octets) :\n%s\n", CLE);
     }
 
-    uint16_t peer_id = (uint16_t)id_peer;
+    uint16_t peer_id = (uint16_t)p.id_peer;
 
-    if (msg_5(msg, peer_id, port_perso, CLE) != 134) {
+    if (msg_5(msg, peer_id, p.port_perso, CLE) != 134) {
         printf("Erreur lors de la construction du message.\n");
         // SSL_free(ssl);
         // SSL_CTX_free(ctx);
@@ -160,7 +160,7 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
     //     return -1;
     // }
 
-    printf("Message 5 envoyé : ID=%d, IP=%s, PORT=%u\n", id_peer, ip_str, ntohs(port));
+    printf("Message 5 envoyé : ID=%d, IP=%s, PORT=%u\n", p.id_peer, ip_str, ntohs(port));
 
     // Wait for response (message 50 or 51)
     uint8_t response[3];

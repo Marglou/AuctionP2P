@@ -14,30 +14,14 @@
 #define MAX_ENCHERES 5
 #define MAX_PEERS 5
 
-typedef struct {
-    int sock;           // Socket de l'enchère
-    // char group[INET6_ADDRSTRLEN];  // Groupe de l'enchère
-    struct in6_addr group; // Adresse IPv6 du groupe d'enchère
-    int id_enchere;     // ID de l'enchère
-    int port_enchere; // Port de l'enchère
-    int nb_pairs; // Nombre de pairs dans l'enchère
-    struct peer *liste_participants; // Liste des pairs de cette enchère
-} EnchereSocket;
-
 // Structure for the peer list
-typedef struct peer {
+typedef struct peer_list {
     uint16_t id;
     struct in6_addr ip;
     uint16_t port_tcp;
     unsigned char cle[113];
-    struct peer *next;
-}peer;
-
-typedef struct {
-    char name[100];
-    EVP_PKEY *pubkey;
-} Peer;
-
+    struct peer_list *next;
+} peer_list;
 
 
 // Structure pour stocker les informations d'un pair
@@ -47,9 +31,6 @@ struct peer_info {
     uint16_t port_tcp;
 };
 
-struct udp_thread_args {
-    int sock;
-};
 
 struct Multicast {
     int sock;                                // Socket UDP multicast
@@ -58,33 +39,57 @@ struct Multicast {
     uint16_t port;                                // Port du groupe
 };
 
+typedef struct {
+    int sock;           // Socket de l'enchère
+    // char group[INET6_ADDRSTRLEN];  // Groupe de l'enchère
+    struct in6_addr group; // Adresse IPv6 du groupe d'enchère
+    int id_enchere;     // ID de l'enchère
+    int port_enchere; // Port de l'enchère
+    int nb_pairs; // Nombre de pairs dans l'enchère
+    struct peer_list *liste_participants; // Liste des pairs de cette enchère
+} EnchereSocket;
 
-// Global variables for private and public keys
-extern EVP_PKEY *my_privkey;
-extern EVP_PKEY *my_pubkey;
 
-extern EnchereSocket encheres[MAX_ENCHERES];
-extern int nb_encheres;    // Nombre d'enchères rejointes
-extern int enchere_active; // Index dans encheres[]
-extern int cpt; // Compteur pour les enchères qu'il a initié
-extern int id_peer; 
-extern int global_sock; // Socket global
-extern int global_iface_index; // Index de l'interface réseau
+struct tcp_listener_state {
+    int socket_tcp;
+    int socket_udp;
+    volatile int response_received;
+    time_t first_response_time;
+};
 
-extern int socket_tcp, socket_udp; // Socket TCP pour la connexion
-extern uint16_t port_perso; // Ports TCP et UDP
-extern struct tcp_listener_state listener_tcp; // État du listener TCP
-extern struct sockaddr_in6 adr_perso; // Adresse IPv6 personnelle
+typedef struct {
+    int id_peer;
+    char *pseudo;
+    uint16_t port_perso;
+    struct sockaddr_in6 adr_perso;
+    EVP_PKEY *ed_privkey;
+    EVP_PKEY *ed_pubkey;
 
-extern struct peer_info discovered_peers[MAX_PEERS]; // Liste des pairs découverts
-extern size_t num_peers; // Nombre de pairs découverts
+    int global_iface_index;
+    int socket_tcp;
+    int socket_udp;
 
-extern char* pseudo;
+    struct tcp_listener_state listener_tcp;
+    struct peer_info discovered_peers[MAX_PEERS];
+    size_t num_peers;
+
+    EnchereSocket encheres[MAX_ENCHERES];
+    int nb_encheres;
+    int enchere_active;
+    int cpt;
+    struct Multicast adr_liaison;
+} Peer;
+
+typedef struct {
+    char name[100];
+    EVP_PKEY *pubkey;
+} peer_key;
+
 
 extern int is_superviseur;
 extern int enchere_supervise;
-extern struct Multicast adr_liaison; // Structure pour le multicast
-
+// extern struct Multicast adr_liaison; // Structure pour le multicast
+extern Peer p;
 
 // Fonctions principales
 void peer_start(const char *nom);
@@ -95,7 +100,7 @@ void handle_sigint(int sig);
 
 // Peer management functions
 // int find_peer_id(struct peer *p, uint16_t *id, bool find_free);
-int add_peer(struct peer **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle);
+int add_peer(struct peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle);
 void clean_peer();
 
 void* listen_main_sockets(void* arg);

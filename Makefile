@@ -24,6 +24,7 @@ $(BIN): $(OBJ)
 # Clean build files
 clean:
 	rm -rf $(OUT_DIR) $(BIN) $(SECURITE)
+	find . -name "*.pem" -type f -delete
 
 # Run the program
 run: $(BIN)

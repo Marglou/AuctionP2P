@@ -11,7 +11,10 @@
         "enchere.h": "c",
         "string.h": "c",
         "superviseur.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "x509.h": "c",
+        "rsa.h": "c",
+        "types.h": "c"
     },
     "github.copilot.enable": {
         "*": true,

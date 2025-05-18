@@ -29,7 +29,7 @@ int msg_4(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp) {
     struct in6_addr adresse_perso;
 
     // Récupérer l'adresse perso
-    if (get_adresse_perso_par_index(&adresse_perso, global_iface_index) != 0)
+    if (get_adresse_perso_par_index(&adresse_perso, p.global_iface_index) != 0)
     {
         fprintf(stderr, "Erreur pour récupérer l'adresse perso\n");
         return -1;
@@ -516,19 +516,19 @@ int decode_message_7(uint8_t *buffer, size_t buffer_size) {
     nb_pairs = ntohs(nb_pairs);
     offset += sizeof(uint16_t);
 
-    // Store the values in the encheres array
-    encheres[enchere_active].id_enchere = id_q;
-    memcpy(&encheres[enchere_active].group, &multicast_addr, sizeof(struct in6_addr));
-    encheres[enchere_active].port_enchere = port;
-    encheres[enchere_active].nb_pairs = nb_pairs;
+    // Store the values in the p.encheres array
+    p.encheres[p.enchere_active].id_enchere = id_q;
+    memcpy(&p.encheres[p.enchere_active].group, &multicast_addr, sizeof(struct in6_addr));
+    p.encheres[p.enchere_active].port_enchere = port;
+    p.encheres[p.enchere_active].nb_pairs = nb_pairs;
 
     // Debug print after validation
-    inet_ntop(AF_INET6, &encheres[enchere_active].group, str_ip, INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, str_ip, INET6_ADDRSTRLEN);
     printf("Debug - Message 7 decoded successfully:\n");
-    printf("  - ID_Q: %d\n", encheres[enchere_active].id_enchere);
+    printf("  - ID_Q: %d\n", p.encheres[p.enchere_active].id_enchere);
     printf("  - Multicast address: %s\n", str_ip);
-    printf("  - Port: %d\n", encheres[enchere_active].port_enchere);
-    printf("  - Number of peers: %d\n", encheres[enchere_active].nb_pairs);
+    printf("  - Port: %d\n", p.encheres[p.enchere_active].port_enchere);
+    printf("  - Number of peers: %d\n", p.encheres[p.enchere_active].nb_pairs);
 
     return 0;
 }
@@ -648,7 +648,7 @@ void envoyer_infos_peers(int socket, EnchereSocket *enchere) {
         return;
     }
 
-    struct peer *current = enchere->liste_participants;
+    peer_list *current = enchere->liste_participants;
 
     do {
         // Préparer le message de 133 octets
