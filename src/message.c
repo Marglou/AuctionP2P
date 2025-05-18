@@ -589,10 +589,11 @@ int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
         if (received < 0) {
             perror("Erreur lors de la réception des données TCP");
             return -1;
-        } else if (received == 0) {
-            fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
-            return -1;
-        }
+        } 
+        // else if (received == 0) {
+        //     fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
+        //     return -1;
+        // }
         total_received += received;
     }
 
@@ -713,10 +714,11 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
         if (received < 0) {
             perror("Erreur lors de la réception des données TCP");
             return -1;
-        } else if (received == 0) {
-            fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
-            return -1;
-        }
+        } 
+        // else if (received == 0) {
+        //     fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
+        //     return -1;
+        // }
         total_received += received;
     }
 

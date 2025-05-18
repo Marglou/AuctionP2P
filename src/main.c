@@ -3,22 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../include/peer.h"
-#include "../include/superviseur.h"
-#include <openssl/evp.h>
-#include <openssl/crypto.h>
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
 
-EVP_PKEY *my_privkey = NULL;
-EVP_PKEY *my_pubkey = NULL;
-
-
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 
 
 int main() {

@@ -237,7 +237,7 @@ int send_UDP (int sock, struct sockaddr_in6 *multicast_addr, char *msg, size_t m
 int send_multicast (int sock, char *msg, size_t msg_len) {
     ssize_t sent = sendto(sock, msg, msg_len, 0,
                           (struct sockaddr *)&p.adr_liaison.addr,
-                          sizeof(p.adr_liaison));
+                          sizeof(struct sockaddr_in6));
     if (sent < 0) {
         perror("sendto multicast");
         return -1;

@@ -50,6 +50,7 @@ void handle_sigint(int sig) {
 
 void peer_start(const char *nom) {
 
+    p.enchere_active = -1; // Aucune enchère active au départ
     p.global_iface_index = get_active_interface();
     if (p.global_iface_index == -1) {
         fprintf(stderr, "Erreur : Aucune interface réseau active trouvée.\n");
@@ -733,7 +734,7 @@ void* listen_main_sockets(void* arg) {
 
         // ENTRÉE CLAVIER
         if (fds[2].revents & POLLIN) {
-            char input[1024];
+            char input[BUF_SIZE];
             if (fgets(input, sizeof(input), stdin) != NULL) {
                 size_t len = strlen(input);
                 if (len > 0 && input[len - 1] == '\n') {
@@ -766,7 +767,7 @@ void* listen_main_sockets(void* arg) {
                 }
                 else {
                     // Message par défaut
-                    char message[1060];
+                    char message[BUF_SIZE];
                     snprintf(message, sizeof(message), "[%s] %s", p.pseudo, input);
 
                     if (p.enchere_active >= 0) {
@@ -798,7 +799,6 @@ void* listen_main_sockets(void* arg) {
 
 
 // ------------------- TCP ------------------------------------------
-
 
 void clean_peer() {
     // Libérer le p.pseudo
@@ -856,7 +856,7 @@ void clean_peer() {
     }
     if (p.ed_privkey) EVP_PKEY_free(p.ed_privkey);
     if (p.ed_pubkey) EVP_PKEY_free(p.ed_pubkey);
-    
+
     printf("Peer nettoyé proprement.\n");
 }
 
@@ -997,40 +997,24 @@ void clean_peer() {
 //     return -1; // No free ID found
 // }
 
-int add_peer(struct peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
-
-    // Créer un nouveau peer
+int add_peer(peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
     peer_list *new_peer = malloc(sizeof(peer_list));
     if (!new_peer) {
         perror("Erreur d'allocation mémoire pour le peer");
         return -1;
     }
 
-    // Initialiser les champs du peer
     new_peer->id = id;
     new_peer->ip = ip;
     new_peer->port_tcp = port;
-    // memcpy(new_peer->cle, cle, 113);
     if (cle != NULL) {
         memcpy(new_peer->cle, cle, 113);
     } else {
-        memset(new_peer->cle, 0, 113); // Initialiser à zéro si cle est NULL
+        memset(new_peer->cle, 0, 113);
     }
-    new_peer->next = NULL;
+    new_peer->next = *head; // Insertion en tête
+    *head = new_peer;
 
-    // Ajouter le peer à la liste
-    if (*head == NULL) {
-        // Si la liste est vide, le nouveau peer devient la tête
-        *head = new_peer;
-    } else {
-        // Ajouter le peer à la fin de la liste
-        peer_list *current = *head;
-        while (current->next != NULL) {
-            current = current->next;
-        }
-        current->next = new_peer;
-    }
-
-   return 0;
+    return 0;
 }
 
