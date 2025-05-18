@@ -4,8 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <fcntl.h>
 #include <sys/socket.h>
-//#include <asm-generic/socket.h>
+// #include <asm-generic/socket.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
 #include <netinet/in.h>
@@ -19,199 +20,12 @@
 #include "../include/superviseur.h"
 #include "../include/message.h"
 #include "../include/enchere.h"
-
-void print_peer_list(struct peer *head) {
-    struct peer *current = head;
-    int count = 0;
-
-    while (current != NULL) {
-        char ip_str[INET6_ADDRSTRLEN];
-        inet_ntop(AF_INET6, &current->ip, ip_str, sizeof(ip_str));
-        printf("Peer %d: ID=%d, IP=%s, Port=%d\n", ++count, current->id, ip_str, current->port_tcp);
-        current = current->next;
-    }
-
-    if (count == 0) {
-        printf("La liste des participants est vide.\n");
-    }
-}
-
-void *listen_tcp_thread(void *arg) {
-    struct tcp_listener_state *state = arg;
-
-    // SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
-    // if (!ctx) {
-    //     ERR_print_errors_fp(stderr);
-    //     return NULL;
-    // }
-
-    while (1) {
-        fd_set readfds;
-        FD_ZERO(&readfds);
-        FD_SET(state->socket_tcp, &readfds);
-        struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
-
-        if (select(state->socket_tcp + 1, &readfds, NULL, NULL, &timeout) > 0 &&
-            FD_ISSET(state->socket_tcp, &readfds)) {
-
-            struct sockaddr_in6 client_addr;
-            socklen_t addr_len = sizeof(client_addr);
-            int client_sock = accept(state->socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
-            if (client_sock < 0) {
-                perror("accept");
-                continue;
-            }
-
-            // Peek 1er octet sans consommer
-            uint8_t peekbuf[1];
-            ssize_t peeklen = recv(client_sock, peekbuf, 1, MSG_PEEK);
-            if (peeklen <= 0) {
-                close(client_sock);
-                continue;
-            }
-
-            if (peekbuf[0] == 4) {
-                // Connexion TCP simple (message 4 attendu)
-                uint8_t buffer[BUF_SIZE];
-                ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
-                if (len > 0 && buffer[0] == 4 && num_peers >= 0) {
-                    struct message_4 parsed_msg;
-                    if (parse_msg_4(buffer, len, &parsed_msg) == 0) {
-                        printf("Pair TCP trouvé : ID=%u, port=%u\n", parsed_msg.id, ntohs(parsed_msg.port));
-                        discovered_peers[num_peers++] = (struct peer_info){
-                            .id = parsed_msg.id,
-                            .ip = parsed_msg.ip,
-                            .port_tcp = parsed_msg.port
-                        };
-                        state->response_received = true;
-                        state->first_response_time = time(NULL);
-                    }
-                }
-                close(client_sock);
-
-            } else if (peekbuf[0] == 5) {
-                // Connexion TCP avec message 5
-                uint8_t buffer[BUF_SIZE];
-                ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
-                if (len > 0 && buffer[0] == 5) {
-                    struct message_5 parsed_msg;
-                    if (parse_msg_5(buffer, len, &parsed_msg) == 0) {
-                        printf("Message 5 reçu : ID=%u,  PORT=%u\n", parsed_msg.id,
-                               (parsed_msg.port));
-                        state->response_received = true;
-                        state->first_response_time = time(NULL);
-                        
-                        // Vérifier si l'ID existe déjà
-                        bool id_exists = false;
-                        int count=0;
-                        int position_enr=0;
-                        for (int i = 0; i < num_peers; ++i) {
-                            if (discovered_peers[i].id == parsed_msg.id) {
-                                count++;
-                            }
-                            if(count==2){
-                                id_exists = true;
-                                position_enr=i;
-                                break;
-                            }
-                        } if (id_exists==false && num_peers < MAX_PEERS) {
-                            
-                            //uint16_t new_id = 10;  // À définir selon ta logique
-                            uint8_t msg[1];
-                            int msg_len = msg_50(msg);
-
-                            if (send(client_sock, msg, msg_len, 0) != msg_len) {
-                                perror("send msg_50");
-                            } else {
-                                printf("Message 50 envoyé à %s:%u avec ID=%u\n",
-                                inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
-                                ntohs(parsed_msg.port),parsed_msg.id);
-                            }
-                        }else{
-                            uint16_t new_id = (int)rand()%25;  // À définir selon ta logique
-                            uint8_t msg[3];
-                            int msg_len = msg_51(msg, new_id);
-
-                            if (send(client_sock, msg, msg_len, 0) != msg_len) {
-                                perror("send msg_51");
-                            } else {
-                                printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",inet_ntoa(*(struct in_addr *)&parsed_msg.ip),ntohs(parsed_msg.port), new_id);
-                                // Ajouter le nouveau pair à la liste
-                                discovered_peers[position_enr].id = new_id;
-                            }
-                        }
-        
-                        // Envoi du message 7 à P pour rejoindre l'enchere
-                        uint8_t buffer[BUF_SIZE];
-                        memset(buffer, 0, sizeof(buffer));
-                        // GERE LE NOMBRE
-                        // int taille = msg_7(buffer, sizeof(buffer), encheres[0], 1);
-                        int taille = message_7_header(buffer, sizeof(buffer), encheres[0]);
-                        // Envoi du message 7 à P en plusieurs parties
-                        size_t total_sent = 0;
-                        while (total_sent < taille) {
-                            ssize_t sent = send(client_sock, buffer + total_sent, taille - total_sent, 0);
-                            if (sent < 0) {
-                                perror("Erreur d'envoi du message");
-                                close(client_sock);
-                                return NULL;
-                            }
-                            total_sent += sent;
-                        }
-
-                        if (total_sent == taille) {
-                            printf("Message 7 header envoyé à P avec succès (%zu octets).\n", total_sent);
-                        } else {
-                            fprintf(stderr, "Erreur : message incomplet envoyé (%zu/%d octets).\n", total_sent, taille);
-                        }
-
-                        //  ENVOI des infos des pairs
-                        printf("Envoi des infos des pairs à P...\n");
-                        print_peer_list(encheres[0].liste_participants);
-                        envoyer_infos_peers(client_sock, &encheres[0]);
-
-                        printf("Message 7 envoyé à P SUCCES.\n");
-                        close(client_sock);
-                    }
-                }
-
-            }
-                close(client_sock);
-            }
-            // else if (peekbuf[0] == 0x16) {
-            //     // TLS probable
-            //     SSL *ssl = SSL_new(ctx);
-            //     SSL_set_fd(ssl, client_sock);
-
-            //     if (SSL_accept(ssl) > 0) {
-            //         // Traitement TLS ici
-            //         printf("Connexion TLS acceptée\n");
-            //         // (tu peux ajouter du recv/send ici en SSL)
-            //     } else {
-            //         fprintf(stderr, "Erreur SSL_accept\n");
-            //         ERR_print_errors_fp(stderr);
-            //     }
-
-            //     SSL_shutdown(ssl);
-            //     SSL_free(ssl);
-            //     close(client_sock);
-
-            // } else {
-            //     printf("Connexion inconnue rejetée (byte 0x%02x)\n", peekbuf[0]);
-            //     close(client_sock);
-            // }
-        } return NULL;
-    }
-
-    // SSL_CTX_free(ctx);
-   
-
-
+#include "../include/utils.h"
 
 int connexion_TLS(struct in6_addr ip, uint16_t port) {
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
-    printf("Connexion TLS à %s:%u...\n", ip_str, ntohs(port));    
+    printf("Connexion TLS à %s:%u...\n", ip_str, (port));    
 
     // // Initialize SSL context
     // SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
@@ -274,7 +88,7 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
     // Set up connection address
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
-    dest.sin6_port = port;  // Port is already in network byte order
+    dest.sin6_port = htons(port);  // Port is already in network byte order
     dest.sin6_addr = ip;
     if (IN6_IS_ADDR_LINKLOCAL(&ip)) {
         dest.sin6_scope_id = global_iface_index;
@@ -321,7 +135,7 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
 
     uint16_t peer_id = (uint16_t)id_peer;
 
-    if (msg_5(msg, peer_id, port_tcp, CLE) != 134) {
+    if (msg_5(msg, peer_id, port_perso, CLE) != 134) {
         printf("Erreur lors de la construction du message.\n");
         // SSL_free(ssl);
         // SSL_CTX_free(ctx);
@@ -330,7 +144,13 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
     }
 
     // Send message
-    sendto(socket_tcp_client, msg, sizeof(msg), 0, (struct sockaddr *)&dest, sizeof(dest));
+    if (send(socket_tcp_client, msg, sizeof(msg), 0) != sizeof(msg)) {
+        perror("send");
+        // SSL_free(ssl);
+        // SSL_CTX_free(ctx);
+        close(socket_tcp_client);
+        return -1;
+    }
 
     // if (SSL_write(ssl, msg, sizeof(msg)) <= 0) {
     //     ERR_print_errors_fp(stderr);

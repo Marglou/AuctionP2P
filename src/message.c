@@ -17,10 +17,10 @@
 #include "../include/superviseur.h"
 #include "../include/enchere.h"
 #include "../include/connexion.h"
+#include "../include/utils.h"
 
 // --------------------------- CODE 4 -----------------------------------------------
-int msg_4(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp)
-{
+int msg_4(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp) {
     // 1 octect pour le code
     // 2 octets pour l'ID du pair
     // 16 octets pour l'adresse perso
@@ -567,6 +567,7 @@ int message_7_header(uint8_t *buffer, size_t buffer_size, EnchereSocket q) {
     char str_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &q.group, str_ip, INET6_ADDRSTRLEN);
     printf("Debug - Message 7 header created:\n");
+    printf("  - CODE: %d\n", buffer[0]);
     printf("  - ID_Q: %d\n", q.id_enchere);
     printf("  - Multicast address: %s\n", str_ip);
     printf("  - Port: %d\n", q.port_enchere);
@@ -632,6 +633,7 @@ int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
     char str_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &enchere->group, str_ip, sizeof(str_ip));
     printf("Message 7 reçu :\n");
+    printf("  - CODE: %d\n", code);
     printf("  - ID_Q: %d\n", enchere->id_enchere);
     printf("  - Multicast address: %s\n", str_ip);
     printf("  - Port: %d\n", enchere->port_enchere);
