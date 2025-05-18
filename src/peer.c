@@ -743,11 +743,13 @@ void* listen_main_sockets(void* arg) {
 
                 if (strcmp(input, "lancer") == 0) {
                     creer_enchere();
+                    continue;
                 }
                 else if (strcmp(input, "join") == 0) {
                     if (msg_join_enchere() == -1) {
                         printf("Erreur lors de l'envoi de la demande de rejoindre l'enchère.\n");
                     }
+                    continue;
                 }
                 else if (strncmp(input, "offre ", 6) == 0) {
                     uint32_t prix;
@@ -756,6 +758,7 @@ void* listen_main_sockets(void* arg) {
                     } else {
                         printf("Format invalide. Utilisez: offre <prix>\n");
                     }
+                    continue;
                 }
                 else if (strncmp(input, "help", 4) == 0) {
                     printf("Commandes disponibles:\n");
@@ -764,8 +767,18 @@ void* listen_main_sockets(void* arg) {
                     printf(" - offre <prix> : Faire une offre\n");
                     printf(" - msg <message> : Envoyer un message\n");
                     printf(" - quit : Quitter le programme\n");
+                    continue;
                 }
+                else if (strcmp(input, "quit") == 0) {
+                    clean_peer();
+                    printf("Quitter le programme...\n");
+                    break;
+                }
+          
                 else {
+                    if (strlen(input) == 0) {
+                        continue; // Ignore empty input
+                    }
                     // Message par défaut
                     char message[BUF_SIZE];
                     snprintf(message, sizeof(message), "[%s] %s", p.pseudo, input);
@@ -798,7 +811,7 @@ void* listen_main_sockets(void* arg) {
 
 
 
-// ------------------- TCP ------------------------------------------
+// -------------------  ------------------------------------------
 
 void clean_peer() {
     // Libérer le p.pseudo

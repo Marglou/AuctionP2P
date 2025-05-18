@@ -584,18 +584,18 @@ int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
     size_t total_received = 0;
 
     // Lire les données jusqu'à ce que 23 octets soient reçus
-    while (total_received < 23) {
+    // while (total_received < 23) {
         ssize_t received = recv(socket, buffer + total_received, 23 - total_received, 0);
         if (received < 0) {
             perror("Erreur lors de la réception des données TCP");
             return -1;
         } 
-        // else if (received == 0) {
-        //     fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
-        //     return -1;
-        // }
-        total_received += received;
-    }
+    //     // else if (received == 0) {
+    //     //     fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
+    //     //     return -1;
+    //     // }
+    //     total_received += received;
+    // }
 
     printf("Debug - Total reçu : %zu octets\n", total_received);
 
@@ -715,15 +715,20 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
             perror("Erreur lors de la réception des données TCP");
             return -1;
         } 
-        // else if (received == 0) {
-        //     fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
-        //     return -1;
-        // }
+        else if (received == 0) {
+            // fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
+            // return -1;
+            break; // Si la connexion est fermée, on sort de la boucle
+        }
         total_received += received;
     }
 
     printf("Debug - Total reçu : %zu octets\n", total_received);
 
+    if (total_received != sizeof(buffer)) {
+        fprintf(stderr, "Erreur : taille du message incorrecte (%zu octets, attendu 133).\n", total_received);
+        return -1;
+    }
     // Extraire les informations du peer
     size_t offset = 0;
 
@@ -745,6 +750,7 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
     uint16_t port = ntohs(*(uint16_t *)(buffer + offset));
     offset += sizeof(uint16_t);
 
+    printf("taille : %zu\n", offset);
     // Vérifier que le message est bien de 133 octets
     if (offset != 133) {
         fprintf(stderr, "Erreur : taille du message incorrecte (%zu octets, attendu 133).\n", offset);
@@ -758,7 +764,7 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
     }
 
     // Incrémenter le nombre de pairs dans l'enchère
-    enchere->nb_pairs++;
+    // enchere->nb_pairs++;
 
     printf("Peer ajouté avec succès : ID=%d, Port=%d\n", id, port);
     return 0;

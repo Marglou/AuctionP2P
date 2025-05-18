@@ -141,14 +141,13 @@ int join_enchere(int id, char *group, uint16_t port) {
 
     // Exemple de clé publique (remplacez par la clé réelle)
     unsigned char cle[113] = {0};
-    memset(cle, 1, sizeof(cle)); // Remplir avec des données fictives
 
     // s'ajouter à la liste des enchères
-    p.encheres[p.nb_encheres].nb_pairs += 1; // Initialiser le nombre de pairs à 0
     if (add_peer(&p.encheres[p.nb_encheres].liste_participants, p.id_peer, adresse_perso, p.port_perso, cle) != 0) {
         fprintf(stderr, "Erreur lors de l'ajout de l'utilisateur en tant que peer.\n");
         return -1;
     }
+    p.encheres[p.nb_encheres].nb_pairs += 1; 
     p.nb_encheres++;
     return 0;
 }
@@ -295,6 +294,7 @@ int msg_join_enchere()
 
         p.encheres[p.nb_encheres].liste_participants = NULL;
       
+        printf("nb pairs %d\n", p.encheres[p.nb_encheres].nb_pairs);
         for (int i = 0; i < p.encheres[p.nb_encheres].nb_pairs; i++) {
             if (recevoir_infos_peer(socket_P, &p.encheres[p.nb_encheres]) != 0) {
                 fprintf(stderr, "Erreur lors de l'ajout du pair à la liste.\n");
@@ -411,7 +411,7 @@ void *auction_receiver(void *arg)
                 default:
                     // Handle text messages
                     buffer[len] = '\0'; // Assure la terminaison
-                    printf("[Enchère] %s", buffer);
+                    printf("[Enchère] %s\n", buffer);
                     fflush(stdout);
                     break;
             }
