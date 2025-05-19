@@ -772,7 +772,9 @@ void* listen_main_sockets(void* arg) {
                     printf(" - lancer : Lancer une enchère\n");
                     printf(" - join : Rejoindre une enchère\n");
                     printf(" - offre <prix> : Faire une offre\n");
-                    printf(" - msg <message> : Envoyer un message\n");
+                    printf(" - encheres : Afficher les enchères avec vente\n");
+                    printf(" - vente : Initier une vente\n");
+                    printf(" - offre : Surencherir\n");
                     printf(" - quit : Quitter le programme\n");
                     continue;
                 }
@@ -781,7 +783,27 @@ void* listen_main_sockets(void* arg) {
                     printf("Quitter le programme...\n");
                     break;
                 }
-          
+                else if (strcmp(input, "encheres") == 0) {
+                    afficher_enncheres();
+                    continue;
+                }
+                else if (strcmp(input, "vente") == 0) {
+                    // Initier une vente
+                    if (init_vente() == -1) {
+                        printf("Erreur lors de l'initiation de la vente.\n");
+                    }
+                    printf("Vente initiée.\n");
+                    continue;
+                } 
+                else if (strcmp(input, "offre") == 0) {
+                    // Surencherir
+                    if (sur_enchere() == -1) {
+                        printf("Erreur lors de la surenchère.\n");
+                    }
+                    printf("Surenchère effectuée.\n");
+                    continue;
+                }
+
                 else {
                     if (strlen(input) == 0) {
                         continue; // Ignore empty input
@@ -791,16 +813,9 @@ void* listen_main_sockets(void* arg) {
                     snprintf(message, sizeof(message), "[%s] %s", p.pseudo, input);
 
                     if (p.enchere_active >= 0) {
-                        struct sockaddr_in6 dest = {0};
-                        dest.sin6_family = AF_INET6;
-                        dest.sin6_port = htons(p.encheres[p.enchere_active].port_enchere);
-                        memcpy(&dest.sin6_addr, &p.encheres[p.enchere_active].group, sizeof(struct in6_addr));
-                        if (IN6_IS_ADDR_LINKLOCAL(&dest.sin6_addr)) {
-                            dest.sin6_scope_id = p.global_iface_index;
+                        if (send_msg_enchere(message, strlen(message), p.enchere_active) < 0) {
+                            fprintf(stderr, "Erreur lors de l'envoi du message d'enchère\n");
                         }
-
-                        sendto(p.encheres[p.enchere_active].sock, message, strlen(message), 0,
-                            (struct sockaddr *)&dest, sizeof(dest));
                     } else {
                         // Envoi général au groupe principal
                         if (send_multicast(p.adr_liaison.sock ,message, strlen(message)) < 0) {

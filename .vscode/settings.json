@@ -14,7 +14,8 @@
         "stdint.h": "c",
         "x509.h": "c",
         "rsa.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "utils.h": "c"
     },
     "github.copilot.enable": {
         "*": true,

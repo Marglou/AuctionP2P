@@ -46,6 +46,7 @@ typedef struct {
     int id_enchere;     // ID de l'enchère
     int port_enchere; // Port de l'enchère
     int nb_pairs; // Nombre de pairs dans l'enchère
+    int numv; // Numéro de la vente
     struct peer_list *liste_participants; // Liste des pairs de cette enchère
 } EnchereSocket;
 

@@ -178,7 +178,7 @@ void envoyer_infos_peers(int socket, EnchereSocket *enchere);
 int recevoir_message_7_header(int socket, EnchereSocket *enchere);
 int recevoir_infos_peer(int socket, EnchereSocket *enchere);
 
-int msg_8(uint8_t *msg, uint16_t id,uint32_t numv,uint32_t prix);
+int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id,uint32_t numv,uint32_t prix);
 
 int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
 

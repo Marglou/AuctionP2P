@@ -185,9 +185,9 @@ int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct)
     return 0;
 }
 
-int msg_8(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix)
+int msg_8_9_10(uint8_t *msg, uint8_t code ,uint16_t id, uint32_t numv, uint32_t prix)
 {
-    msg[0] = 8; // Code du message
+    msg[0] = code; // Code du message
 
     // ID (2 octets, réseau)
     uint16_t net_id = htons(id);

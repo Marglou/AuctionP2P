@@ -199,3 +199,4 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
     // Keep SSL and socket for future use
     return socket_tcp_client;
 }
+
