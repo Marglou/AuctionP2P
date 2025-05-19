@@ -91,9 +91,9 @@ void peer_start(const char *nom) {
     char ip_str[INET6_ADDRSTRLEN];
 
     // Demander à l'utilisateur de saisir un port
-    printf("Entrez le port perso (0-65535) : ");
-    if (scanf("%hu", &p.port_perso) != 1 || p.port_perso == 0) {
-        fprintf(stderr, "Port invalide.\n");
+    printf("Entrez le port perso (49152-65535) : ");
+    if (scanf("%hu", &p.port_perso) != 1 || p.port_perso < 49152 || p.port_perso > 65535) {
+        fprintf(stderr, "Port invalide. Le port doit être entre 49152 et 65535.\n");
         exit(EXIT_FAILURE);
     }
 
@@ -337,7 +337,8 @@ void *listen_tcp_thread(void *arg) {
                             } else {
                                 printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",inet_ntoa(*(struct in_addr *)&parsed_msg.ip),ntohs(parsed_msg.port), new_id);
                                 // Ajouter le nouveau pair à la liste
-                                p.discovered_peers[position_enr].id = new_id;
+                                //p.discovered_peers[position_enr].id = new_id;
+                                parsed_msg.id=new_id;
                             }
                         }
         
@@ -387,10 +388,26 @@ void *listen_tcp_thread(void *arg) {
                         } else {
                             perror("recv");
                             close(client_sock);
-                        }
+                         }
 
+                        //ICI
+                        printf("id=%d\n",parsed_msg.id);
+                        connect_to_peers_and_send_info(p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
+                        printf("envoye a tous is good\n");
                     }
                 }
+
+            }else if(peekbuf[0] == 6){
+                uint8_t buffer[BUF_SIZE];
+                ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
+                struct message_6 msg={0};
+                if(parse_msg_6(buffer,sizeof(msg),&msg)<0){
+                    printf("erreur message 6 reception\n");
+                }
+                add_peer(&p.encheres[p.enchere_active].liste_participants,msg.id,msg.ip,msg.port,msg.cle);
+                p.encheres[p.enchere_active].nb_pairs++;
+                printf("info message 6 recu paire ajouté\n");
+                close(client_sock);
 
             }
                 close(client_sock);
@@ -898,71 +915,76 @@ void clean_peer() {
 
 
 // Function to connect to all other peers and send message 6
-// int connect_to_peers_and_send_info(struct peer *p, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
-//                                  uint16_t new_peer_port, unsigned char *new_peer_cle) {
-//     int ret = 0;
-//     struct peer *current = p->next;
+ int connect_to_peers_and_send_info(peer_list *h, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
+                                  uint16_t new_peer_port, unsigned char *new_peer_cle) {
+     int ret = 0;
+    peer_list *current = h->next;
     
-//     while (current != p) {
-//         // Create TLS connection to the peer
-//         int sock = connexion_TLS(current->ip, current->port_tcp);
-//         if (sock < 0) {
-//             fprintf(stderr, "Failed to create TLS connection to peer %d\n", current->id);
-//             current = current->next;
-//             continue;
-//         }
+     while (current != NULL) {
+         // Create TLS connection to the peer
+         if(current->id==p.id_peer){
+            current=current->next;
+            continue;
+         }
+         int sock = connexion_TLS(current->ip, current->port_tcp);
+         if (sock < 0) {
+             fprintf(stderr, "Failed to create TLS connection to peer %d\n", current->id);
+             current = current->next;
+             continue;
+         }
 
-//         // Create and send message 6
-//         uint8_t msg[1 + 2 + 16 + 2 + 113];  // CODE + ID + IP + PORT + CLE
-//         int msg_len = msg_6(msg, new_peer_id, new_peer_ip, new_peer_port, new_peer_cle);
+         // Create and send message 6
+         uint8_t msg[1 + 2 + 16 + 2 + 113];  // CODE + ID + IP + PORT + CLE
+         int msg_len = msg_6(msg, new_peer_id, new_peer_ip, new_peer_port, new_peer_cle);
+         printf("id:%d,port\n",msg[msg_len]);
         
-//         if (send(sock, msg, msg_len, 0) != msg_len) {
-//             fprintf(stderr, "Failed to send message 6 to peer %d\n", current->id);
-//             close(sock);
-//             current = current->next;
-//             continue;
-//         }
+         if (send(sock, msg, msg_len, 0) != msg_len) {
+            fprintf(stderr, "Failed to send message 6 to peer %d\n", current->id);
+             close(sock);
+             current = current->next;
+             continue;
+         }
 
 //         // If we're in an active auction, send auction information
-//         if (p.enchere_active >= 0) {
-//             // Create message content with auction info
-//             char message[256];
-//             snprintf(message, sizeof(message), "AUCTION_INFO %s %u", 
-//                     encheres[p.enchere_active].id, encheres[p.enchere_active].sock);
+         /*if (p.enchere_active >= 0) {
+             // Create message content with auction info
+             char message[256];
+             snprintf(message, sizeof(message), "AUCTION_INFO %s %u", 
+                     encheres[p.enchere_active].id, encheres[p.enchere_active].sock);
             
 //             // Sign the message
-//             unsigned char signature[crypto_sign_BYTES];
-//             if (crypto_sign_detached(signature, NULL, 
-//                                    (const unsigned char *)message, strlen(message),
-//                                    my_privkey) != 0) {
-//                 fprintf(stderr, "Failed to sign auction info message\n");
-//                 close(sock);
-//                 current = current->next;
-//                 continue;
-//             }
+             unsigned char signature[crypto_sign_BYTES];
+             if (crypto_sign_detached(signature, NULL, 
+                                    (const unsigned char *)message, strlen(message),
+                                   my_privkey) != 0) {
+                 fprintf(stderr, "Failed to sign auction info message\n");
+                 close(sock);
+                 current = current->next;
+                 continue;
+             }
 
 //             // Send auction information
-//             envoyer_info_auction(sock, atoi(p.id_peer), p.cpt, 0, 
-//                                (const unsigned char *)message, strlen(message),
-//                                signature);
-//         }
+             envoyer_info_auction(sock, atoi(p.id_peer), p.cpt, 0, 
+                                (const unsigned char *)message, strlen(message),
+                                signature);
+         }*/
 
 //         // Read response
-//         uint8_t response[2];
-//         int bytes_read = recv(sock, response, 2, 0);
-//         if (bytes_read != 2) {
-//             fprintf(stderr, "Failed to read response from peer %d\n", current->id);
-//             close(sock);
-//             current = current->next;
-//             continue;
-//         }
+         uint8_t response[2];
+         int bytes_read = recv(sock, response, 2, 0);
+         if (bytes_read == 0) {
+            printf("envoye ok msg 6\n");
+             close(sock);
+            current = current->next;
+             continue;
+         }
 
-//         close(sock);
-//         current = current->next;
-//     }
+         close(sock);
+         current = current->next;
+     }
 
-//     return ret;
-// }
+     return ret;
+}
 
 // Function to handle a new peer connection (message 5)
 // int handle_new_peer(struct peer *p, SSL *ssl, uint8_t *msg, size_t msg_len) {

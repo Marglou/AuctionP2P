@@ -107,6 +107,9 @@ void clean_peer();
 void* listen_main_sockets(void* arg);
 void *listen_tcp_thread(void *arg);
 
+int connect_to_peers_and_send_info(peer_list *p, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
+                                  uint16_t new_peer_port, unsigned char *new_peer_cle);
+
 
 
 #endif // PEER_H
