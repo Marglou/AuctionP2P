@@ -121,6 +121,7 @@ int join_enchere(int id, char *group, uint16_t port) {
     if (IN6_IS_ADDR_LINKLOCAL(&group_addr.sin6_addr)) {
         group_addr.sin6_scope_id = p.global_iface_index;
     }
+    group_addr.sin6_scope_id = p.global_iface_index;
     // Message d'acceptation
     char accept_msg[BUF_SIZE];
     snprintf(accept_msg, sizeof(accept_msg), "[ACCEPTED] Vous avez rejoint l'enchère %d\n", id);
@@ -252,6 +253,7 @@ int msg_join_enchere()
         printf("Tentative %d : envoi du message CODE 3.\n", attempts);
         uint8_t msg[3] = {3};
         uint16_t port_p = htons(p.port_perso);
+        printf("Port envoyé : %u\n", ntohs(port_p));
         memcpy(&msg[1], &port_p, 2);
 
         if (send_multicast(p.socket_udp, msg, sizeof(msg)) != 0) {

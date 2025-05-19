@@ -125,12 +125,13 @@ void peer_start(const char *nom) {
 
     // Création sockets perso (TCP & UDP)
     if (create_perso_adr_sockets(p.adr_perso, p.global_iface_index, &p.socket_tcp, &p.socket_udp, p.port_perso) != 0) {
+        printf("test:%d\n",p.global_iface_index);
         fprintf(stderr, "Erreur lors de la création des sockets perso TCP/UDP.\n");
         exit(EXIT_FAILURE);
     }
 
 // ------------------------------- MULTICAST ---------------------------------------------------
-
+    // Création du socket UDP IPv6
     p.adr_liaison.sock = socket(AF_INET6, SOCK_DGRAM, 0);
     if (p.adr_liaison.sock < 0) {
         perror("socket multicast");
@@ -138,11 +139,12 @@ void peer_start(const char *nom) {
         exit(EXIT_FAILURE);
     }
 
+    // Préparation de l'adresse de liaison
     p.adr_liaison.addr.sin6_family = AF_INET6;
     p.adr_liaison.addr.sin6_port = htons(PORT);
-    p.adr_liaison.addr.sin6_addr = in6addr_any;
+    p.adr_liaison.addr.sin6_addr = in6addr_any;  // liaison sur toutes les adresses locales
 
-    // Réutilisation des adresses et des ports avant bind
+    // Réutilisation d'adresse et de port
     int reuse = 1;
     if (setsockopt(p.adr_liaison.sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
         perror("setsockopt multicast SO_REUSEADDR");
@@ -156,40 +158,45 @@ void peer_start(const char *nom) {
         free(p.pseudo);
         exit(EXIT_FAILURE);
     }
+
+    // Liaison du socket
     if (bind(p.adr_liaison.sock, (struct sockaddr *)&p.adr_liaison.addr, sizeof(p.adr_liaison.addr)) < 0) {
         perror("bind multicast");
-        // close(p.adr_liaison.sock);
         clean_peer();
-        // free(p.pseudo);
         exit(EXIT_FAILURE);
     }
-    // Abonnement au groupe multicast
+
+    // Conversion de l'adresse multicast (ex: ff02::abcd)
     if (inet_pton(AF_INET6, GROUP, &p.adr_liaison.mreq.ipv6mr_multiaddr) != 1) {
         perror("inet_pton multicast");
         clean_peer();
         exit(EXIT_FAILURE);
     }
-    if (IN6_IS_ADDR_LINKLOCAL(&p.adr_liaison.mreq.ipv6mr_multiaddr)) {
-        p.adr_liaison.mreq.ipv6mr_interface = p.global_iface_index;
-    }
-    if (setsockopt(p.adr_liaison.sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &p.adr_liaison.mreq, sizeof(p.adr_liaison.mreq)) < 0) {
+
+    // Définition de l'interface multicast (ex: en0)
+    p.adr_liaison.mreq.ipv6mr_interface = p.global_iface_index;
+    printf("tete:%d\n", p.adr_liaison.mreq.ipv6mr_interface);
+
+    // Abonnement au groupe multicast
+    if (setsockopt(p.adr_liaison.sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
+                &p.adr_liaison.mreq, sizeof(p.adr_liaison.mreq)) < 0) {
         perror("setsockopt IPV6_JOIN_GROUP");
         clean_peer();
         exit(EXIT_FAILURE);
     }
-    
-    // INIT pour l'envoi
-    if (IN6_IS_ADDR_LINKLOCAL(&p.adr_liaison.addr.sin6_addr)) {
-        p.adr_liaison.addr.sin6_scope_id = p.global_iface_index;
-    }
+
+    // Initialisation de l'adresse de destination pour l'envoi
     if (inet_pton(AF_INET6, GROUP, &p.adr_liaison.addr.sin6_addr) != 1) {
         perror("inet_pton multicast");
         clean_peer();
         exit(EXIT_FAILURE);
     }
+
+    // Ajout du scope ID pour une adresse link-local (obligatoire pour ff02::)
+    p.adr_liaison.addr.sin6_scope_id = p.global_iface_index;
+
     printf("Abonné au groupe multicast %s sur l'interface %d\n", GROUP, p.global_iface_index);
-    // Sauvegarde globale pour interruption
-    // p.global_sock = p.adr_liaison.sock;
+
 
     // Gestion du signal
     signal(SIGINT, handle_sigint);
@@ -198,7 +205,7 @@ void peer_start(const char *nom) {
     // Message de JOIN
     char join_msg[BUF_SIZE];
     snprintf(join_msg, sizeof(join_msg), "[JOIN] %s a rejoint le groupe.\n", nom);
-
+    
     if (send_multicast(p.adr_liaison.sock, join_msg, strlen(join_msg)) < 0) {
         fprintf(stderr, "Erreur lors de l'envoi du message de JOIN.\n");
         close(p.adr_liaison.sock);

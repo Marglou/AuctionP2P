@@ -67,6 +67,44 @@ int get_ipv6_address(char *buf, size_t buflen) {
         if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET6)
             continue;
 
+        // ❌ Ignorer les interfaces loopback (comme lo0)
+        if (ifa->ifa_flags & IFF_LOOPBACK)
+            continue;
+
+        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+
+        // ❌ Ignorer les adresses :: (non spécifiées) et ::1 (loopback)
+        if (IN6_IS_ADDR_LOOPBACK(&addr6->sin6_addr) ||
+            IN6_IS_ADDR_UNSPECIFIED(&addr6->sin6_addr))
+            continue;
+
+        // ✅ Optionnel : tu peux garder ou non cette ligne selon ton cas
+        // Pour l’instant, on accepte les adresses lien-local (fe80::/10)
+        // Si tu veux les exclure : if (IN6_IS_ADDR_LINKLOCAL(&addr6->sin6_addr)) continue;
+
+        if (inet_ntop(AF_INET6, &addr6->sin6_addr, buf, buflen) != NULL) {
+            found = 1;
+            break;
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    return found ? 0 : -1;
+}
+
+/*int get_ipv6_address(char *buf, size_t buflen) {
+    struct ifaddrs *ifaddr, *ifa;
+    int found = 0;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return -1;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET6)
+            continue;
+
         struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)ifa->ifa_addr;
 
         // On ignore ::, ::1 et les adresses loopback
@@ -90,7 +128,7 @@ int get_ipv6_address(char *buf, size_t buflen) {
 
     freeifaddrs(ifaddr);
     return found ? 0 : -1;
-}
+}*/
 
 int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index) {
     struct ifaddrs *ifaddr, *ifa;

@@ -93,6 +93,7 @@ int connexion_TLS(struct in6_addr ip, uint16_t port) {
     if (IN6_IS_ADDR_LINKLOCAL(&ip)) {
         dest.sin6_scope_id = p.global_iface_index;
     }
+    dest.sin6_scope_id = p.global_iface_index;
 
     // Connect
     if (connect(socket_tcp_client, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
