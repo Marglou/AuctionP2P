@@ -189,7 +189,9 @@ void envoyer_infos_peers(int socket, EnchereSocket *enchere);
 int recevoir_message_7_header(int socket, EnchereSocket *enchere);
 int recevoir_infos_peer(int socket, EnchereSocket *enchere);
 
-int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id,uint32_t numv,uint32_t prix);
+int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix);
+int msg_14_15(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix);
+int parse_msg_8_9_10(uint8_t *msg, size_t msg_len, struct message_8 *msg_struct);
 
 int msg_1 (const struct message_1 *msg, unsigned char **buf_out, size_t *buf_len);
 int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_out);

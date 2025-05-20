@@ -230,6 +230,9 @@ void creer_enchere()
     inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, ip_str, sizeof(ip_str));
     printf("Enchère initiée : ID=%d, ADR=%s\n", auction_num_id, ip_str);
 
+    is_superviseur = 1;
+    init_auction_supervisor();
+    enchere_supervise = auction_num_id;
 }
 
 // ----------------------------------------------------------------------------
@@ -284,57 +287,16 @@ void *auction_receiver(void *arg)
             // Handle binary messages with codes
             uint8_t code = (uint8_t)buffer[0];
             
-            switch (code) {
-                case 8: { // Auction initiation
-                    uint16_t id = ntohs(*(uint16_t*)&buffer[1]);
-                    uint32_t numv = ntohl(*(uint32_t*)&buffer[3]);
-                    uint32_t prix = ntohl(*(uint32_t*)&buffer[7]);
-                    
-                    printf("[Enchère] Nouvelle enchère initiée par pair %u: NUMV=%u, PRIX=%u\n", 
-                           id, numv, prix);
-                    //  Peut etre juste un flag pour savoir si on peut enchérir
-                    p.encheres[p.enchere_active].numv = numv;
-                    break;
+            if (code == 8 || code == 9 || code == 10 || code == 14 | code == 15) {
+                struct message_8 msg;
+                if (parse_msg_8_9_10(buffer, len, &msg) == 0) {
+                    handle_auction_message(code, msg.id, msg.numv, msg.prix);
                 }
-                
-                case 9: { // Bid message
-                    uint16_t id = ntohs(*(uint16_t*)&buffer[1]);
-                    uint32_t numv = ntohl(*(uint32_t*)&buffer[3]);
-                    uint32_t prix = ntohl(*(uint32_t*)&buffer[7]);
-                    
-                    printf("[Enchère] Nouvelle offre de pair %u: NUMV=%u, PRIX=%u\n", 
-                           id, numv, prix);
-                    
-                    
-                    // If we are the supervisor, relay the message with code 10 and consensus
-                    if (p.enchere_active >= 0 && is_superviseur == 1) {
-                        uint8_t relay_msg[1 + 2 + 4 + 4];
-                        relay_msg[0] = 10; // Change code to 10
-                        memcpy(&relay_msg[1], &buffer[1], 10); // Copy ID, NUMV, and PRIX
-                        
-                        // CONSENSUS 
-                        printf("[Superviseur] Relais de l'offre de pair %u\n", id);
-                    }
-                    break;
-                }
-                
-                case 10: { // Relayed bid message
-                    uint16_t id = ntohs(*(uint16_t*)&buffer[1]);
-                    uint32_t numv = ntohl(*(uint32_t*)&buffer[3]);
-                    uint32_t prix = ntohl(*(uint32_t*)&buffer[7]);
-                    
-                    printf("[Enchère] Offre validée de pair %u: NUMV=%u, PRIX=%u\n", 
-                           id, numv, prix);
-                    break;
-                }
-                
-                default:
-                // on suppose que consensus quand recoit un message mess donc sans code 
-                    // Handle text messages 
-                    buffer[len] = '\0'; // Assure la terminaison
-                    printf("[Enchère] %s\n", buffer);
-                    fflush(stdout);
-                    break;
+            } else {
+                // Handle text messages 
+                buffer[len] = '\0'; // Assure la terminaison
+                printf("[Enchère] %s\n", buffer);
+                fflush(stdout);
             }
         }
     }

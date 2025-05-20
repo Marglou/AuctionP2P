@@ -43,6 +43,10 @@ void handle_sigint(int sig) {
         fprintf(stderr, "Erreur lors de l'envoi du message de départ.\n");
     }
 
+    if (is_superviseur) {
+        cleanup_auction_supervisor(); // Clean up supervisor state if we were a supervisor
+    }
+
     clean_peer();
     exit(0);
 }

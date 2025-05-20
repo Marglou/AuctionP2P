@@ -187,25 +187,77 @@ int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct)
     return 0;
 }
 
-int msg_8_9_10(uint8_t *msg, uint8_t code ,uint16_t id, uint32_t numv, uint32_t prix)
-{
-    msg[0] = code; // Code du message
-
-    // ID (2 octets, réseau)
-    uint16_t net_id = htons(id);
-    memcpy(&msg[1], &net_id, sizeof(net_id));
-
-    // numv (4 octets, réseau)
-    uint32_t net_numv = htonl(numv);
-    memcpy(&msg[3], &net_numv, sizeof(net_numv));
-
-    // prix (4 octets, réseau)
-    uint32_t net_prix = htonl(prix);
-    memcpy(&msg[7], &net_prix, sizeof(net_prix));
-
-    return 11; // Taille totale du message
+int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
+    if (!msg) return -1;
+    
+    // Validate code
+    if (code != 8 && code != 9 && code != 10) return -1;
+    
+    msg[0] = code; // Message code (8, 9, or 10)
+    
+    // ID (2 bytes, network byte order)
+    uint16_t id_net = htons(id);
+    memcpy(&msg[1], &id_net, sizeof(id_net));
+    
+    // NUMV (4 bytes, network byte order)
+    uint32_t numv_net = htonl(numv);
+    memcpy(&msg[3], &numv_net, sizeof(numv_net));
+    
+    // PRIX (4 bytes, network byte order)
+    uint32_t prix_net = htonl(prix);
+    memcpy(&msg[7], &prix_net, sizeof(prix_net));
+    
+    return 11; // Total message size
 }
 
+// Function to create rejection messages (14, 15)
+int msg_14_15(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
+    if (!msg) return -1;
+    
+    // Validate code
+    if (code != 14 && code != 15) return -1;
+    
+    msg[0] = code; // Message code (14 or 15)
+    
+    // ID (2 bytes, network byte order)
+    uint16_t id_net = htons(id);
+    memcpy(&msg[1], &id_net, sizeof(id_net));
+    
+    // NUMV (4 bytes, network byte order)
+    uint32_t numv_net = htonl(numv);
+    memcpy(&msg[3], &numv_net, sizeof(numv_net));
+    
+    // PRIX (4 bytes, network byte order)
+    uint32_t prix_net = htonl(prix);
+    memcpy(&msg[7], &prix_net, sizeof(prix_net));
+    
+    return 11; // Total message size
+}
+
+// Function to parse auction messages (8, 9, 10)
+int parse_msg_8_9_10(uint8_t *msg, size_t msg_len, struct message_8 *msg_struct) {
+    if (!msg || !msg_struct || msg_len < 11) return -1;
+    
+    msg_struct->code = msg[0];
+    if (msg_struct->code != 8 && msg_struct->code != 9 && msg_struct->code != 10) return -1;
+    
+    // Parse ID (2 bytes)
+    uint16_t id_net;
+    memcpy(&id_net, &msg[1], sizeof(id_net));
+    msg_struct->id = ntohs(id_net);
+    
+    // Parse NUMV (4 bytes)
+    uint32_t numv_net;
+    memcpy(&numv_net, &msg[3], sizeof(numv_net));
+    msg_struct->numv = ntohl(numv_net);
+    
+    // Parse PRIX (4 bytes)
+    uint32_t prix_net;
+    memcpy(&prix_net, &msg[7], sizeof(prix_net));
+    msg_struct->prix = ntohl(prix_net);
+    
+    return 0;
+}
 
 // ---------------  CODE 1 ------------------------------------------------
 // Renvoie la taille totale du message  (ou -1 en erreur)
