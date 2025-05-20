@@ -122,6 +122,7 @@ void peer_start(const char *nom) {
     if (IN6_IS_ADDR_LINKLOCAL(&p.adr_perso.sin6_addr)) {
         p.adr_perso.sin6_scope_id = p.global_iface_index; // Utiliser le scope ID pour les adresses lien-local
     }
+    p.adr_perso.sin6_scope_id = p.global_iface_index;
 
     // Création sockets perso (TCP & UDP)
     if (create_perso_adr_sockets(p.adr_perso, p.global_iface_index, &p.socket_tcp, &p.socket_udp, p.port_perso) != 0) {
@@ -449,73 +450,25 @@ int gestion_reception_liaison() {
 
     // Protocole pour rejoindre un système d'enchères
     if (code == 3 && p.nb_encheres > 0) {
+        char msg[1 + 2 + 16 + 2];
+         if (msg_4(msg, p.id_peer, p.port_perso) != 0) {
+             fprintf(stderr, "Erreur lors de la construction du message 4.\n");
+             return -1;
+         }
 
-        // if (msg_4(buf, p.id_peer, p.port_perso) != 0) {
-        //     fprintf(stderr, "Erreur lors de la construction du message 4.\n");
-        //     return -1;
-        // }
-        // // if (sendto(p.socket_udp, msg, sizeof(msg), 0,
-        // //          (struct sockaddr*)&src, len) < 0) {
-        // //     perror("sendto");
-        //     // return -1;
-        // if (send_multicast(p.socket_udp, buf, sizeof(buf)) < 0) {
-        //     perror("sendto");
-        //     return -1;
-        // } else {
-        //     // Afficher l'adresse et le port source
-        //     char ip_str[INET6_ADDRSTRLEN];
-        //     inet_ntop(AF_INET6, &src.sin6_addr, ip_str, sizeof(ip_str));
-        //     printf("Message send a [%s]:%d\n", ip_str, ntohs(src.sin6_port));
- 
-
-        // }
-        // return 0;
-        uint16_t port_tcp_dest;
-        memcpy(&port_tcp_dest, &buf[1], 2);  // Extraire le port du message reçu
-
-        char ip_str[INET6_ADDRSTRLEN];
-        inet_ntop(AF_INET6, &src.sin6_addr, ip_str, sizeof(ip_str));  // Convertir l'adresse IP en chaîne
-        
-        // Création de la structure sockaddr_in6 pour la connexion TCP
-        struct sockaddr_in6 dest_tcp;
-        memset(&dest_tcp, 0, sizeof(dest_tcp));
-        dest_tcp.sin6_family = AF_INET6;
-        dest_tcp.sin6_port = port_tcp_dest;  // Utiliser le port du serveur
-        dest_tcp.sin6_addr = src.sin6_addr;  // Utiliser l'adresse IP du pair
-
-        if (IN6_IS_ADDR_LINKLOCAL(&src.sin6_addr)) {
-            dest_tcp.sin6_scope_id = p.global_iface_index;  // Spécifier l'index de l'interface
-        }
-
-        // Créer un socket TCP
-        int sock = socket(PF_INET6, SOCK_STREAM, 0);
-        if (sock < 0) {
-            perror("socket");
-            return -1;
-        }
-        
-        // Connexion au serveur
-        if (connect(sock, (struct sockaddr *)&dest_tcp, sizeof(dest_tcp)) == 0) {
-            // Si la connexion est réussie, envoyer le message CODE 4
-            uint8_t msg[21];  // 1 + 2 + 16 + 2 = 21 octets
-            uint16_t peer_id = (uint16_t)p.id_peer;
-            if (msg_4(msg, peer_id, p.port_perso) != 0) {
-                fprintf(stderr, "Erreur lors de la construction du message.\n");
-                return -1;
-            }
-
-            // Envoi
-            send(sock, msg, sizeof(msg), 0);
-            close(sock);  // Fermer le socket après l'envoi
-            printf("Message 4 envoyé en TCP à [%s]:%d\n", ip_str, ntohs(port_tcp_dest));
-        } else {
-            perror("connect TCP");
-            close(sock);  // Fermer le socket en cas d'échec
-            return -1;
+         if (sendto(p.socket_udp, msg, sizeof(msg), 0,
+                (struct sockaddr*)&src, len) < 0) {
+              perror("sendto");
+            return -1; 
+    
+         } else {
+             // Afficher l'adresse et le port source
+             char ip_str[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, &src.sin6_addr, ip_str, sizeof(ip_str));
+            printf("Message send a [%s]:%d\n", ip_str, ntohs(src.sin6_port));
         }
         return 0;
-        
-    }
+    } 
 
     // Traitement texte normal
     printf("[Multicast] %s\n", buf);
@@ -565,13 +518,87 @@ int gestion_reception_UDP() {
             p.discovered_peers[p.num_peers++] = (struct peer_info){
                 .id = parsed_msg.id,
                 .ip = parsed_msg.ip,
-                .port_tcp = ntohs(parsed_msg.port)};
+                .port_tcp = (parsed_msg.port)};
             p.listener_tcp.response_received = true;
             p.listener_tcp.first_response_time = time(NULL);
             char ip_str[INET6_ADDRSTRLEN];
             inet_ntop(AF_INET6, &p.discovered_peers[p.num_peers - 1].ip, ip_str, sizeof(ip_str));
             printf("Pair découvert : ID=%u, IP=%s, Port TCP=%u\n",
                    p.discovered_peers[p.num_peers-1].id, ip_str, p.discovered_peers[p.num_peers - 1].port_tcp);
+
+            if (p.num_peers > 0) {
+                struct peer_info *peer_Q = &p.discovered_peers[0];
+                char ip_str[INET6_ADDRSTRLEN];
+                inet_ntop(AF_INET6, &peer_Q->ip, ip_str, sizeof(ip_str));
+                uint16_t port = (peer_Q->port_tcp);
+                printf("Connexion à : ID=%u, IP=%s, PORT=%u\n", peer_Q->id, ip_str, port);
+
+                // connexion qui doit rester ouverte, stocker le return de x=connexion_TLS et voir comment gerer ca
+                int socket_P = connexion_TLS(peer_Q->ip, port);
+                if (socket_P < 0){
+                    close(socket_P);
+                    printf("Erreur connexion à Q\n");
+                    return -1;
+                }
+
+                printf("Je suis ds msg_join étape 7\n");
+
+                // RECEVOIR MESSAGE 7
+                if (recevoir_message_7_header(socket_P, &p.encheres[p.nb_encheres]) != 0) {
+                    fprintf(stderr, "Erreur lors de la réception du message 7.\n");
+                    close(socket_P);
+                    return -1;
+                }
+                sleep(1);
+
+                if (&p.encheres[p.enchere_active] == NULL) {
+                    fprintf(stderr, "Erreur : enchère active non initialisée.\n");
+                    return -1;
+                }
+
+                p.encheres[p.nb_encheres].liste_participants = NULL;
+            
+                printf("nb pairs %d\n", p.encheres[p.nb_encheres].nb_pairs);
+                for (int i = 0; i < p.encheres[p.nb_encheres].nb_pairs; i++) {
+                    if (recevoir_infos_peer(socket_P, &p.encheres[p.nb_encheres]) != 0) {
+                        fprintf(stderr, "Erreur lors de l'ajout du pair à la liste.\n");
+                        close(socket_P);
+                        return -1;
+                    }
+                }
+
+                int enchere_precedente = p.enchere_active; // Enchère précédente
+                p.enchere_active = p.nb_encheres; // Indique que nous avons rejoint l'enchère active
+                // Print the decoded message details
+                char str_ip[INET6_ADDRSTRLEN];
+                if (inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, str_ip, sizeof(str_ip)) == NULL) {
+                    perror("inet_ntop");
+                    close(socket_P);
+                    return -1;
+                }
+                printf("Message 7 reçu : ID_Q=%d, IP_enchere=%s, PORT_enchere=%d\n", 
+                    p.encheres[p.enchere_active].id_enchere,
+                    str_ip,
+                    p.encheres[p.enchere_active].port_enchere);
+
+                // Join the auction with the received information
+                if (join_enchere(p.encheres[p.enchere_active].id_enchere, 
+                                str_ip, 
+                                p.encheres[p.enchere_active].port_enchere) != 0) {
+                    fprintf(stderr, "Erreur lors de la jointure de l'enchère.\n");
+                    memset(&p.encheres[p.enchere_active], 0, sizeof(EnchereSocket));
+                    p.enchere_active = enchere_precedente; // Reset active auction
+                    send(socket_P, "erreur", 6, 0);
+                    close(socket_P);
+                    return -1;
+                }
+                //printf("nb de pairs enchere %d\n",p.encheres[p.enchere_active].nb_pairs);
+                close(socket_P);
+        return 0;
+    }
+
+    printf("Aucune enchère trouvée. Création d'une nouvelle.\n");
+    creer_enchere();
             return 0;
         }
     }
@@ -594,28 +621,7 @@ int gestion_reception_TCP(int client_fd, struct tcp_listener_state* listener) {
         perror("recv");
         return -1;
     }
-
-    if (peekbuf[0] == 4) {
-        // Connexion TCP simple (message 4 attendu)
-        printf("Connexion TCP à %d\n", ntohs(client_addr.sin6_port));
-        uint8_t buffer[BUF_SIZE];
-        ssize_t len = recv(client_fd, buffer, BUF_SIZE, 0);
-        if (len > 0 && buffer[0] == 4 && p.num_peers >= 0) {
-            struct message_4 parsed_msg;
-            if (parse_msg_4(buffer, len, &parsed_msg) == 0) {
-                printf("Pair TCP trouvé : ID=%u, port=%u\n", parsed_msg.id, ntohs(parsed_msg.port));
-                p.discovered_peers[p.num_peers++] = (struct peer_info){
-                    .id = parsed_msg.id,
-                    .ip = parsed_msg.ip,
-                    .port_tcp = parsed_msg.port
-                };
-                listener->response_received = true;
-                listener->first_response_time = time(NULL);
-            }
-        }
-        close(client_fd);
-
-    } else if (peekbuf[0] == 5) {
+    else if (peekbuf[0] == 5) {
         // Message 5
         uint8_t buffer[BUF_SIZE];
         ssize_t len = recv(client_fd, buffer, BUF_SIZE, 0);
@@ -707,7 +713,7 @@ int gestion_reception_TCP(int client_fd, struct tcp_listener_state* listener) {
 
 void* listen_main_sockets(void* arg) {
     struct pollfd fds[3] = {0};
-    nfds_t n = 3;
+    int n = 3;
 
     fds[0].fd = p.adr_liaison.sock;  // Multicast
     fds[0].events = POLLIN;
@@ -722,21 +728,15 @@ void* listen_main_sockets(void* arg) {
     // fds[3].events = POLLIN;
 
     while (1) {
-        int ret = poll(fds, n, 10000);  // bloquant
+        int ret = poll(fds, n, -1);  
 
         if (ret < 0) {
             perror("poll");
             break;
         }
 
-        if (ret == 0){
-            printf("delai ecoule\n");
-            continue;
-        }
-
         // SOCKET MULTICAST
         if (fds[0].revents & POLLIN) {
-
             if (gestion_reception_liaison() < 0) {
                 fprintf(stderr, "Erreur lors de la réception du message multicast.\n");
             }
@@ -813,7 +813,6 @@ void* listen_main_sockets(void* arg) {
                     printf("Surenchère effectuée.\n");
                     continue;
                 }
-
                 else {
                     if (strlen(input) == 0) {
                         continue; // Ignore empty input

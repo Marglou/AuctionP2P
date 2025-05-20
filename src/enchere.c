@@ -243,97 +243,22 @@ int msg_join_enchere()
     time_t start = time(NULL);
 
     printf("Tentative de rejoindre une enchère...  %d\n", p.listener_tcp.response_received);
-    while (attempts++ < max_attempts && p.listener_tcp.response_received == 0)
-    {
+   //while (attempts++ < max_attempts && p.listener_tcp.response_received == 0) {
+   // AJOUTER MUTEX OU AUTRE CHOSE A VOIR 
         printf("Reponse recue %d\n", p.listener_tcp.response_received);
         printf("Tentative %d : envoi du message CODE 3.\n", attempts);
         uint8_t msg[3] = {3};
         uint16_t port_p = htons(p.port_perso);
-        printf("Port envoyé : %u\n", ntohs(port_p));
         memcpy(&msg[1], &port_p, 2);
 
         if (send_multicast(p.socket_udp, msg, sizeof(msg)) != 0) {
             fprintf(stderr, "Erreur lors de l'envoi du message de demande de jointure.\n");
             return -1;
         }
-        sleep(timeout_sec);
-    }
-
-    if (p.num_peers > 0)
-    {
-        struct peer_info *peer_Q = &p.discovered_peers[0];
-        char ip_str[INET6_ADDRSTRLEN];
-        inet_ntop(AF_INET6, &peer_Q->ip, ip_str, sizeof(ip_str));
-        uint16_t port = (peer_Q->port_tcp);
-        printf("Connexion à : ID=%u, IP=%s, PORT=%u\n", peer_Q->id, ip_str, port);
-
-        // connexion qui doit rester ouverte, stocker le return de x=connexion_TLS et voir comment gerer ca
-        int socket_P = connexion_TLS(peer_Q->ip, port);
-        if (socket_P < 0){
-            close(socket_P);
-            printf("Erreur connexion à Q\n");
-            return -1;
-        }
-
-        printf("Je suis ds msg_join étape 7\n");
-
-        // RECEVOIR MESSAGE 7
-        if (recevoir_message_7_header(socket_P, &p.encheres[p.nb_encheres]) != 0) {
-            fprintf(stderr, "Erreur lors de la réception du message 7.\n");
-            close(socket_P);
-            return -1;
-        }
         sleep(1);
+    //}
 
-        if (&p.encheres[p.enchere_active] == NULL) {
-            fprintf(stderr, "Erreur : enchère active non initialisée.\n");
-            return -1;
-        }
-
-        p.encheres[p.nb_encheres].liste_participants = NULL;
-      
-        printf("nb pairs %d\n", p.encheres[p.nb_encheres].nb_pairs);
-        for (int i = 0; i < p.encheres[p.nb_encheres].nb_pairs; i++) {
-            if (recevoir_infos_peer(socket_P, &p.encheres[p.nb_encheres]) != 0) {
-                fprintf(stderr, "Erreur lors de l'ajout du pair à la liste.\n");
-                close(socket_P);
-                return -1;
-            }
-        }
-
-        int enchere_precedente = p.enchere_active; // Enchère précédente
-        p.enchere_active = p.nb_encheres; // Indique que nous avons rejoint l'enchère active
-        // Print the decoded message details
-        char str_ip[INET6_ADDRSTRLEN];
-        if (inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, str_ip, sizeof(str_ip)) == NULL) {
-            perror("inet_ntop");
-            close(socket_P);
-            return -1;
-        }
-        printf("Message 7 reçu : ID_Q=%d, IP_enchere=%s, PORT_enchere=%d\n", 
-               p.encheres[p.enchere_active].id_enchere,
-               str_ip,
-               p.encheres[p.enchere_active].port_enchere);
-
-        // Join the auction with the received information
-        if (join_enchere(p.encheres[p.enchere_active].id_enchere, 
-                        str_ip, 
-                        p.encheres[p.enchere_active].port_enchere) != 0) {
-            fprintf(stderr, "Erreur lors de la jointure de l'enchère.\n");
-            memset(&p.encheres[p.enchere_active], 0, sizeof(EnchereSocket));
-            p.enchere_active = enchere_precedente; // Reset active auction
-            send(socket_P, "erreur", 6, 0);
-            close(socket_P);
-            return -1;
-        }
-        //printf("nb de pairs enchere %d\n",p.encheres[p.enchere_active].nb_pairs);
-        close(socket_P);
-        return 0;
-    }
-
-    printf("Aucune enchère trouvée. Création d'une nouvelle.\n");
-    creer_enchere();
-    return -1;
+    return 0;
 }
 
 // Thread pour recevoir les messages du groupe d'enchères
@@ -546,6 +471,7 @@ int send_msg_enchere(uint8_t *msg, size_t len, int num_enchere)
     if (IN6_IS_ADDR_LINKLOCAL(&dest.sin6_addr)) {
         dest.sin6_scope_id = p.global_iface_index;
     }
+    dest.sin6_scope_id = p.global_iface_index;
     ssize_t sent_bytes = sendto(p.encheres[num_enchere].sock, msg, len, 0,
                                  (struct sockaddr *)&dest, sizeof(dest));
 

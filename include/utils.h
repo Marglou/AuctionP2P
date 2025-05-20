@@ -21,5 +21,6 @@ void print_peer_list(peer_list *head);
 int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index);
 int send_multicast(int sock, char *msg, size_t msg_len);
 int send_UDP(int sock, struct sockaddr_in6 *multicast_addr, char *msg, size_t msg_len);
+int set_socket_nonblocking(int sockfd);
 
 #endif // UTILS_H

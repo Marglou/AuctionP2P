@@ -12,6 +12,24 @@
 
 #include "../include/utils.h"
 
+#include <fcntl.h>  // pour fcntl()
+
+int set_socket_nonblocking(int sockfd) {
+    int flags = fcntl(sockfd, F_GETFL, 0);
+    if (flags == -1) {
+        perror("fcntl(F_GETFL)");
+        return -1;
+    }
+
+    if (fcntl(sockfd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        perror("fcntl(F_SETFL)");
+        return -1;
+    }
+
+    return 0;  // succès
+}
+
+
 int get_active_interface() {
     struct ifaddrs *ifaddr, *ifa;
     
@@ -229,6 +247,7 @@ int create_perso_adr_sockets(struct sockaddr_in6 ip, unsigned int scope_id,
     *udp_sock = socket(AF_INET6, SOCK_DGRAM, 0);
     if (*udp_sock < 0) {
         perror("socket");
+        close(*tcp_sock);
         exit(EXIT_FAILURE);
     }
 
