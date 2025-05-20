@@ -68,18 +68,34 @@ void peer_start(const char *nom) {
 // -----------------------------  SECURITE  -------------------------------------------------------
     init_openssl();
     char ed_pub[256], ed_priv[256];
-    snprintf(ed_pub, sizeof(ed_pub), "%s_ed_pub.pem", p.pseudo);
-    snprintf(ed_priv, sizeof(ed_priv), "%s_ed_priv.pem", p.pseudo);
+    snprintf(ed_pub, sizeof(ed_pub), "%s_ed_pubKey.pem", p.pseudo);
+    snprintf(ed_priv, sizeof(ed_priv), "%s_ed_privKey.pem", p.pseudo);
      // Générer et enregistrer les clés ED25519
-    if (generate_ed25519_keys(ed_pub, ed_priv)) {
+    if (generate_ed25519_key(ed_pub, ed_priv)) {
+        p.ed_privkey = convert_private_key_to_evp_pkey(ed_priv);
+        // prive pour signature 
+        /*
+        	// signature 
+        unsigned char *signature
+        if(sign(pkey, msg, &signature, &slen)){
+            printf("signature effectuée ! - longueurs : msg : %lu sign : %zu \n", strlen((char *) msg), slen);
+            printf("\n");
+        }
+            //nettoyage 
+            if(signature != NULL)
+            free(signature);
+        */
+       p.ed_pubkey = convert_public_key_to_evp_pkey(ed_pub);
+        /*
+	    verify(pubkey, msg, signature, slen);
+        */
         printf("Clés ED25519 générées et enregistrées avec succès.\n");
     } else {
         fprintf(stderr, "Erreur lors de la génération des clés ED25519.\n");
         free(p.pseudo);
         exit(EXIT_FAILURE);
     }
-    p.ed_privkey = load_private_key(ed_priv);
-    p.ed_pubkey = load_public_key(ed_pub);
+
     if (p.ed_privkey == NULL || p.ed_pubkey == NULL) {
         fprintf(stderr, "Erreur lors du chargement des clés ED25519.\n");
         free(p.pseudo);
@@ -510,7 +526,7 @@ int gestion_reception_UDP() {
     }
 
     buf[n] = '\0';
-    // Gestion des messages binaires avec code
+    // Gestion des messages avec code
     if (buf[0] == 4 && p.num_peers >= 0) {
         struct message_4 parsed_msg;
         if (parse_msg_4(buf, len, &parsed_msg) == 0)
@@ -601,8 +617,9 @@ int gestion_reception_UDP() {
     creer_enchere();
             return 0;
         }
+    } else if (buf[0] == 1) {
+        printf("verif du msg 1 consensus\n");
     }
-    // Traitement texte normal
     printf("[Unicast UDP] %s\n", buf);
     fflush(stdout);
 

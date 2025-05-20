@@ -18,6 +18,8 @@
 #include "../include/enchere.h"
 #include "../include/connexion.h"
 #include "../include/utils.h"
+#include "../include/securite.h"
+
 
 // --------------------------- CODE 4 -----------------------------------------------
 int msg_4(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp) {
@@ -204,69 +206,126 @@ int msg_8_9_10(uint8_t *msg, uint8_t code ,uint16_t id, uint32_t numv, uint32_t 
     return 11; // Taille totale du message
 }
 
-void envoyer_message(int socket, uint16_t id)
-{
-    QuitMessage msg;
-    msg.CODE = 13;      // Code du message de fin
-    msg.ID = htons(id); // Conversion en big-endian
 
-    send(socket, &msg, sizeof(msg), 0);
+// ---------------  CODE 1 ------------------------------------------------
+// Renvoie la taille totale du message  (ou -1 en erreur)
+int msg_1 (const struct message_1 *msg, unsigned char **buf_out, size_t *buf_len) {
+    if (!msg || !buf_out || !buf_len) return -1;
+
+    // Taille totale = 1 + 2 + 1 + lmess + 1 + lsig
+    *buf_len = 1 + 2 + 1 + msg->lmess + 1 + msg->lsig;
+    *buf_out = malloc(*buf_len);
+    if (!*buf_out) return -1;
+
+    unsigned char *p = *buf_out;
+
+    // CODE
+    *p++ = msg->code;
+
+    // ID (2 octets big-endian)
+    uint16_t id_be = htons(msg->id);
+    memcpy(p, &id_be, 2);
+    p += 2;
+
+    // LMESS
+    *p++ = msg->lmess;
+
+    // MESS (lmess bytes)
+    memcpy(p, msg->mess, msg->lmess);
+    p += msg->lmess;
+
+    // LSIG
+    *p++ = msg->lsig;
+
+    // SIG (lsig bytes)
+    if (msg->lsig > 0)
+        memcpy(p, msg->sig, msg->lsig);
+
+    return 0;
 }
 
-// Fonction pour envoyer le message
-void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix)
-{
-    RejetMessage msg;
-    msg.CODE = code; // 14 ou 15
-    // quand on fait apelle a la fonction on met 14 ou 15, CODE vaut 14 si l'enchère est rejetée car en concurrence avec une autre enchère et 15 sinon
-    msg.ID = htons(id);     // Conversion en big-endian
-    msg.NUMV = htonl(numv); // Conversion en big-endian
-    msg.PRIX = htonl(prix); // Conversion en big-endian
+int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_out) {
+    if (!buf || !msg_out || buflen < 6) // minimum taille (CODE+ID+LMESS+LSIG = 1+2+1+1)
+        return -1;
 
-    send(socket, &msg, sizeof(msg), 0);
+    const unsigned char *p = buf;
+
+    msg_out->code = *p++;
+    if (msg_out->code != 1)
+        return -1;
+
+    uint16_t id_be;
+    memcpy(&id_be, p, 2);
+    p += 2;
+    msg_out->id = ntohs(id_be);
+
+    msg_out->lmess = *p++;
+    if (buflen < 1 + 2 + 1 + msg_out->lmess + 1)
+        return -1;
+
+    msg_out->mess = malloc(msg_out->lmess);
+    if (!msg_out->mess) return -1;
+    memcpy(msg_out->mess, p, msg_out->lmess);
+    p += msg_out->lmess;
+
+    msg_out->lsig = *p++;
+
+    size_t sig_expected_len = msg_out->lsig;
+    if (buflen < 1 + 2 + 1 + msg_out->lmess + 1 + sig_expected_len) {
+        free(msg_out->mess);
+        return -1;
+    }
+
+    if (sig_expected_len > 0) {
+        msg_out->sig = malloc(sig_expected_len);
+        if (!msg_out->sig) {
+            free(msg_out->mess);
+            return -1;
+        }
+        memcpy(msg_out->sig, p, sig_expected_len);
+    } else {
+        msg_out->sig = NULL;
+    }
+
+    return 0;
 }
 
-void envoyer_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t prix)
+int send_msg_1(EVP_PKEY *privkey, uint16_t id, const char *mess,
+               unsigned char **buf_out, size_t *buf_len)
 {
-    FinalisationVenteMessage msg;
-    if (etape == true)
-    {                 // true pour initier false pour enrichier
-        msg.CODE = 8; // supeviseur
-    }
-    else
-    {
-        msg.CODE = 9; //
-    }
-    // la gestion de l'id dans l'appel
-    // faire verif si on est true le code doit etre 8 et c'est oblige superviseur
-    // pour la cloture soit superviseur si personne la prend ou gagnant si reuss
-    msg.ID = htons(id);
-    msg.NUMV = htonl(numv);
-    msg.PRIX = htonl(prix);
+    if (!privkey || !mess || !buf_out || !buf_len) return -1;
 
-    send(socket, &msg, sizeof(msg), 0);
+    struct message_1 msg;
+    msg.code = 1;
+    msg.id = id;
+    msg.lmess = strlen(mess);
+    msg.mess = (unsigned char *)mess;
+
+    unsigned char *signature = NULL;
+    size_t siglen = 0;
+
+    // Signature du message
+    if (!sign(privkey, msg.mess, &signature, &siglen)) {
+        fprintf(stderr, "Erreur lors de la signature\n");
+        return -1;
+    }
+
+    msg.lsig = siglen;
+    msg.sig = signature;
+
+    // Encodage du message dans un buffer
+    int res = msg_1(&msg, buf_out, buf_len);
+
+    // Libération de la signature temporaire
+    free(signature);
+
+    return res; // 0 si OK, -1 sinon
 }
 
-void envoyer_finalisation_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t prix)
-{
-    FinalisationVenteMessage msg;
-    if (etape == true)
-    { // true pour cloture false pour finalisation
-        msg.CODE = 11;
-    }
-    else
-    {
-        msg.CODE = 12;
-    }
-    // la gestion de l'id dans l'appel
-    // faire verif si on est true le code doit etre 11 et c'est oblige superviseur
-    // pour la cloture soit superviseur si personne la prend ou gagnant si reuss
-    msg.ID = htons(id);
-    msg.NUMV = htonl(numv);
-    msg.PRIX = htonl(prix);
 
-    send(socket, &msg, sizeof(msg), 0);
-}
+// ------------------------------------------------------------------------------------
+
+
 
 void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t numv, uint16_t *ids_disparus, uint16_t nb)
 {
@@ -305,6 +364,72 @@ void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t num
         send(socket, msg, taille_msg, 0);
         free(msg);
     }
+}
+
+void envoyer_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t prix)
+{
+    FinalisationVenteMessage msg;
+    if (etape == true)
+    {                 // true pour initier false pour enrichier
+        msg.CODE = 8; // supeviseur
+    }
+    else
+    {
+        msg.CODE = 9; //
+    }
+    // la gestion de l'id dans l'appel
+    // faire verif si on est true le code doit etre 8 et c'est oblige superviseur
+    // pour la cloture soit superviseur si personne la prend ou gagnant si reuss
+    msg.ID = htons(id);
+    msg.NUMV = htonl(numv);
+    msg.PRIX = htonl(prix);
+
+    send(socket, &msg, sizeof(msg), 0);
+}
+
+
+void envoyer_finalisation_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t prix)
+{
+    FinalisationVenteMessage msg;
+    if (etape == true)
+    { // true pour cloture false pour finalisation
+        msg.CODE = 11;
+    }
+    else
+    {
+        msg.CODE = 12;
+    }
+    // la gestion de l'id dans l'appel
+    // faire verif si on est true le code doit etre 11 et c'est oblige superviseur
+    // pour la cloture soit superviseur si personne la prend ou gagnant si reuss
+    msg.ID = htons(id);
+    msg.NUMV = htonl(numv);
+    msg.PRIX = htonl(prix);
+
+    send(socket, &msg, sizeof(msg), 0);
+}
+
+
+// Fonction pour envoyer le message
+void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix)
+{
+    RejetMessage msg;
+    msg.CODE = code; // 14 ou 15
+    // quand on fait apelle a la fonction on met 14 ou 15, CODE vaut 14 si l'enchère est rejetée car en concurrence avec une autre enchère et 15 sinon
+    msg.ID = htons(id);     // Conversion en big-endian
+    msg.NUMV = htonl(numv); // Conversion en big-endian
+    msg.PRIX = htonl(prix); // Conversion en big-endian
+
+    send(socket, &msg, sizeof(msg), 0);
+}
+
+void envoyer_message(int socket, uint16_t id)
+{
+    QuitMessage msg;
+    msg.CODE = 13;      // Code du message de fin
+    msg.ID = htons(id); // Conversion en big-endian
+
+    send(socket, &msg, sizeof(msg), 0);
 }
 
 void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix)

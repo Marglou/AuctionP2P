@@ -155,6 +155,17 @@ struct message_8 {
     uint32_t prix;    // Port TCP de P
 };
 
+// PARTIE CONSENSUS 
+struct message_1 {
+    uint8_t code;       // CODE, ici = 1
+    uint16_t id;        // ID du pair (big-endian à sérialiser)
+    uint8_t lmess;      // longueur du message MESS
+    char *mess;         // pointeur vers message (non terminé)
+    uint8_t lsig;       // longueur de la signature
+    unsigned char *sig; // pointeur vers signature binaire
+};
+
+//--------------------------------------------------------------------------------------------------
 // Prototypes de fonctions
 int msg_4 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp);
 int parse_msg_4 (uint8_t *msg, size_t msg_len, struct message_4 *msg_struct);
@@ -179,6 +190,12 @@ int recevoir_message_7_header(int socket, EnchereSocket *enchere);
 int recevoir_infos_peer(int socket, EnchereSocket *enchere);
 
 int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id,uint32_t numv,uint32_t prix);
+
+int msg_1 (const struct message_1 *msg, unsigned char **buf_out, size_t *buf_len);
+int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_out);
+int send_msg_1(EVP_PKEY *privkey, uint16_t id, const char *mess,
+               unsigned char **buf_out, size_t *buf_len);
+
 
 int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
 

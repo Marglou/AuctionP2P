@@ -3,10 +3,14 @@
 #include <stdlib.h>
 #include <sys/stat.h>  // pour mkdir
 #include <sys/types.h> // optionnel, mais recommandé avec mkdir
-#include <openssl/x509.h>
-#include <openssl/pem.h>
+#include <unistd.h>
+#include <openssl/sha.h>
 #include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/crypto.h>
 #include <openssl/rsa.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 
 #include "../include/peer.h"
 
@@ -20,101 +24,182 @@ void init_openssl() {
 }
 
 /* Convertit une clé privée PEM en EVP_PKEY */
-EVP_PKEY *load_private_key(const char *filename) {
-    EVP_PKEY *pkey = NULL;
-    FILE *fp = fopen(filename, "r");
-    if (!fp) { perror("fopen"); return NULL; }
-    PEM_read_PrivateKey(fp, &pkey, NULL, NULL);
-    fclose(fp);
-    return pkey;
+EVP_PKEY *convert_public_key_to_evp_pkey(char *pubkey) {
+	EVP_PKEY *pkey = NULL; 
+	FILE *fp = fopen(pubkey, "r");
+	if(fp == NULL){
+		perror("fopen");
+		return NULL;
+	}
+	
+	PEM_read_PUBKEY(fp, &pkey, NULL, NULL);   
+	if (pkey == NULL) {
+		fprintf(stderr, "erreur: PEM_read_PUBKEY\n");
+		return NULL;
+	}
+
+	fclose(fp);
+	return pkey; 
 }
 
 /* Convertit une clé publique PEM en EVP_PKEY */
-EVP_PKEY *load_public_key(const char *filename) {
-    EVP_PKEY *pkey = NULL;
-    FILE *fp = fopen(filename, "r");
-    if (!fp) { perror("fopen"); return NULL; }
-    PEM_read_PUBKEY(fp, &pkey, NULL, NULL);
-    fclose(fp);
-    return pkey;
+EVP_PKEY *convert_private_key_to_evp_pkey(char *privkey) {
+	EVP_PKEY *pkey = NULL;
+	FILE *fp = fopen(privkey, "r");
+	if(fp == NULL){
+		perror("fopen");
+		return NULL;
+	}
+	
+	PEM_read_PrivateKey(fp, &pkey, NULL, NULL);    
+	if (pkey == NULL) {
+		fprintf(stderr, "erreur: PEM_read_PrivateKey\n");
+		return NULL;
+	}
+
+	fclose(fp);
+	return pkey; 
 }
 
-/* Génère une paire de clés RSA */
-int generate_rsa_keys(const int bits, const char *pub_file, const char *priv_file) {
-    EVP_PKEY *pkey = EVP_RSA_gen(bits);
-    if (!pkey) return 0;
-
-    FILE *pub = fopen(pub_file, "w+");
-    if (!pub) { perror("fopen"); return 0; }
-    if (!PEM_write_PUBKEY(pub, pkey)) return 0;
-    fclose(pub);
-
-    FILE *priv = fopen(priv_file, "w+");
-    if (!priv) { perror("fopen"); return 0; }
-    if (!PEM_write_PrivateKey(priv, pkey, NULL, NULL, 0, NULL, NULL)) return 0;
-    fclose(priv);
-
-    EVP_PKEY_free(pkey);
-    return 1;
-}
 
 /* Génère une paire de clés ED25519 */
-int generate_ed25519_keys(const char *pub_file, const char *priv_file) {
-    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, NULL);
-    EVP_PKEY *pkey = NULL;
-    if (!ctx || EVP_PKEY_keygen_init(ctx) <= 0 || EVP_PKEY_generate(ctx, &pkey) <= 0)
-        return 0;
+int generate_ed25519_key(char* public_key_name, char* private_key_name){
+	EVP_PKEY *pkey = NULL;
+	EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, NULL);
+	int ret = 0;
+	FILE *bp_public = NULL;
+	FILE* bp_private = NULL;
 
-    FILE *pub = fopen(pub_file, "w+");
-    FILE *priv = fopen(priv_file, "w+");
-    if (!pub || !priv) return 0;
+	// initialise le contexte pour la génération d'une paire de clés
+	if(EVP_PKEY_keygen_init(pctx) <= 0){
+		fprintf(stderr, "erreur EVP_PKEY_keygen_init\n");
+		return ret;
+	}
 
-    PEM_write_PUBKEY(pub, pkey);
-    PEM_write_PrivateKey(priv, pkey, NULL, NULL, 0, NULL, NULL);
-    fclose(pub); fclose(priv);
+	// engendre une paire de clés ED25519
+	EVP_PKEY_generate(pctx, &pkey);
+	if(pkey == NULL) {
+		fprintf(stderr, "erreur EVP_PKEY_keygen\n");
+		goto err;
+	}
 
-    EVP_PKEY_free(pkey);
-    EVP_PKEY_CTX_free(ctx);
-    return 1;
+	// sauvegarde la clé publique
+	bp_public = fopen(public_key_name, "w+");
+	ret = PEM_write_PUBKEY(bp_public, pkey);
+	fclose(bp_public);
+	if(ret != 1){
+		fprintf(stderr, "erreur PEM_write_PUBKEY\n");
+		goto err;
+	}
+	
+	// sauvegarde la clé privée 
+	bp_private = fopen(private_key_name, "w+");
+	ret = PEM_write_PrivateKey(bp_private, pkey, NULL, NULL, 0, NULL, NULL);
+	fclose(bp_private);
+	if(ret != 1){
+		fprintf(stderr, "PEM_write_PrivateKey error\n");
+		goto err;
+	}
+
+	ret = 1;
+
+ err:
+	EVP_PKEY_free(pkey);
+	EVP_PKEY_CTX_free(pctx);
+	return ret;
 }
 
-/* Signature (RSA ou ED25519) */
-int sign_message(EVP_PKEY *privkey, unsigned char *msg, unsigned char **sig, size_t *siglen) {
-    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-    int ret = 0;
-    *sig = NULL;
-    if (!ctx) return 0;
+/* Signature (ED25519) */
+int sign(EVP_PKEY *pkey, unsigned char *msg, unsigned char **sig, size_t *slen) {
+	EVP_MD_CTX *mdctx = NULL;
+	int ret = 0, msg_len = strlen((char *) msg);
+	
+	*sig = NULL;
 
-    if (EVP_DigestSignInit(ctx, NULL, NULL, NULL, privkey) <= 0) goto end;
+	/* crée le Message Digest Context */
+	if(!(mdctx = EVP_MD_CTX_create())){
+		fprintf(stderr, "erreur EVP_MD_CTX_create\n");
+		goto err;
+	}
 
-    if (EVP_DigestSign(ctx, NULL, siglen, msg, strlen((char *)msg)) <= 0) goto end;
+	/* initialise l'operation DigestSign (hachage avec signature) 
+	 * avec la clé privée.
+	 * 3eme param (fonction de hachage) doit être NULL pour une clé ED25519
+	 * puisque celle-ci utilise SHA-512 (pas de choix) 
+	 * si RSA, fonction de hachage peut être EVP_sha256() */
+	if(1 != EVP_DigestSignInit(mdctx, NULL, NULL, NULL, pkey)){
+		fprintf(stderr, "erreur EVP_DigestSignInit\n");
+		goto err;
+	} 
+	
+	/* appel une 1ère fois de EVP_DigestSign avec le paramètre 
+	 * sig à NULL afin d'obtenir la longueur de la signature */
+	if(1 != EVP_DigestSign(mdctx, NULL, slen, msg, msg_len)) {
+		fprintf(stderr, "erreur EVP_DigestSign\n");
+		goto err;
+	} 
 
-    *sig = malloc(*siglen);
-    if (!*sig) goto end;
+	/* alloue la mémoire pour la signature */ 
+	if(!(*sig = malloc(sizeof(unsigned char) * (*slen)))) {
+		fprintf(stderr, "erreur malloc\n");
+		goto err;
+	} 
 
-    if (EVP_DigestSign(ctx, *sig, siglen, msg, strlen((char *)msg)) <= 0) goto end;
+	/* obtention de la signature */
+	if(1 != EVP_DigestSign(mdctx, *sig, slen, msg, msg_len)) {
+		fprintf(stderr, "erreur EVP_DigestSign\n");
+		goto err;
+	} 
 
-    ret = 1;
-end:
-    if (!ret && *sig) { free(*sig); *sig = NULL; }
-    EVP_MD_CTX_free(ctx);
-    return ret;
+	/* Succès */
+	ret = 1;
+	printf("message : %s\n", msg);
+	EVP_MD_CTX_free(mdctx);
+	return 1;
+ 
+ err:
+	if(ret != 1)
+		fprintf(stderr, "erreur dans sign()\n");
+		 
+	/* nettoyage mémoire */
+	if(*sig && !ret) OPENSSL_free(*sig); // = free(*sig);
+	if(mdctx) EVP_MD_CTX_free(mdctx); //EVP_MD_CTX_destroy(mdctx);
+
+	return 0;
 }
 
-/* Vérification de signature */
-int verify_signature(EVP_PKEY *pubkey, unsigned char *msg, unsigned char *sig, size_t siglen) {
-    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-    if (!ctx) return 0;
+/* fonctionne pour clés RSA et ED25519 */
+int verify(EVP_PKEY *pubkey, unsigned char *msg, unsigned char *sig, size_t slen) {
+	EVP_MD_CTX *mdctx;
+	int ret = -1;
+	
+	/* crée le Message Digest Context */
+	if(!(mdctx = EVP_MD_CTX_create()))  return 0; //erreur
 
-    if (EVP_DigestVerifyInit(ctx, NULL, NULL, NULL, pubkey) <= 0) goto fail;
-    int result = EVP_DigestVerify(ctx, sig, siglen, msg, strlen((char *)msg));
-    EVP_MD_CTX_free(ctx);
-    return result == 1;
+	/* initialise l'operation DigestVerify (hachage avec signature) 
+	 * avec la clé publique 
+	 * 3eme param (fonction de hachage) doit être NULL pour une clé ED25519
+	 * puisque celle-ci utilise SHA-512 (pas de choix)
+	 * si RSA, fonction de hachage peut être EVP_sha256() */
+	if(1 != EVP_DigestVerifyInit(mdctx, NULL, NULL, NULL, pubkey)) {
+		fprintf(stderr, "erreur EVP_DigestVerifyInit : %s\n", ERR_error_string(ERR_get_error(), NULL));
+		goto err;
+	}
 
-fail:
-    EVP_MD_CTX_free(ctx);
-    return 0;
+	if(1 == EVP_DigestVerify(mdctx, sig, slen, msg, strlen((char *) msg)))
+		printf("signature ok\n");
+	else {
+		printf("document corrompu\n");
+		return 0;
+	}
+
+	ret = 1;
+ err:
+	EVP_MD_CTX_free(mdctx);
+	
+	return ret;
 }
+
 
 
 
@@ -155,23 +240,6 @@ EVP_PKEY *get_peer_pubkey(const char *name)
     return NULL;
 }
 
-EVP_PKEY *generate_ed25519_key()
-{
-    EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, NULL);
-    if (!pctx)
-        return NULL;
-
-    EVP_PKEY *pkey = NULL;
-    if (EVP_PKEY_keygen_init(pctx) <= 0 ||
-        EVP_PKEY_keygen(pctx, &pkey) <= 0)
-    {
-        EVP_PKEY_CTX_free(pctx);
-        return NULL;
-    }
-
-    EVP_PKEY_CTX_free(pctx);
-    return pkey;
-}
 
 
 int verify_message(EVP_PKEY *pubkey, const unsigned char *msg, size_t msglen,

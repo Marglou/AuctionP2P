@@ -306,7 +306,7 @@ void *auction_receiver(void *arg)
                            id, numv, prix);
                     
                     
-                    // If we are the supervisor, relay the message with code 10
+                    // If we are the supervisor, relay the message with code 10 and consensus
                     if (p.enchere_active >= 0 && is_superviseur == 1) {
                         uint8_t relay_msg[1 + 2 + 4 + 4];
                         relay_msg[0] = 10; // Change code to 10
@@ -329,7 +329,8 @@ void *auction_receiver(void *arg)
                 }
                 
                 default:
-                    // Handle text messages
+                // on suppose que consensus quand recoit un message mess donc sans code 
+                    // Handle text messages 
                     buffer[len] = '\0'; // Assure la terminaison
                     printf("[Enchère] %s\n", buffer);
                     fflush(stdout);
