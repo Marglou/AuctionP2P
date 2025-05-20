@@ -287,9 +287,19 @@ void *auction_receiver(void *arg)
             // Handle binary messages with codes
             uint8_t code = (uint8_t)buffer[0];
             
-            if (code == 8 || code == 9 || code == 10 || code == 14 | code == 15) {
+            if (code == 8 || code == 9 || code == 10 || code == 14 || code == 15) {
                 struct message_8 msg;
                 if (parse_msg_8_9_10(buffer, len, &msg) == 0) {
+                    handle_auction_message(code, msg.id, msg.numv, msg.prix);
+                }
+            } else if (code == 11) {
+                FinalizationWarningMessage msg;
+                if (parse_msg_11(buffer, len, &msg) == 0) {
+                    handle_auction_message(code, msg.id, msg.numv, msg.prix);
+                }
+            } else if (code == 12) {
+                FinalizationMessage msg;
+                if (parse_msg_12(buffer, len, &msg) == 0) {
                     handle_auction_message(code, msg.id, msg.numv, msg.prix);
                 }
             } else {

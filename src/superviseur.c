@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <net/if.h>
+#include <time.h>
 
 #include "../include/superviseur.h"
 #include "../include/peer.h"
@@ -24,6 +25,12 @@ uint32_t current_price = 0;
 uint32_t current_numv = 0;
 uint16_t current_bidder = 0;
 
+// Timer variables for auction finalization
+#define INACTIVITY_TIMEOUT 30  // 30 seconds of inactivity before warning
+#define FINALIZATION_TIMEOUT 30  // 30 seconds after warning before finalization
+time_t last_bid_time = 0;
+int warning_sent = 0;
+
 void init_auction_supervisor() {
     is_superviseur = 1;
     current_price = 0;
@@ -37,6 +44,42 @@ void cleanup_auction_supervisor() {
     current_price = 0;
     current_numv = 0;
     current_bidder = 0;
+}
+
+void reset_auction_timer() {
+    last_bid_time = time(NULL);
+    warning_sent = 0;
+}
+
+void check_auction_timeout() {
+    if (!is_superviseur || !enchere_supervise) {
+        return;
+    }
+
+    time_t current_time = time(NULL);
+    time_t elapsed = current_time - last_bid_time;
+
+    // If no warning sent and timeout reached, send warning
+    if (!warning_sent && elapsed >= INACTIVITY_TIMEOUT) {
+        uint8_t warning_msg[11];
+        if (msg_11(warning_msg, p.id_peer, current_numv, current_price) == 11) {
+            send_msg_enchere(warning_msg, 11, p.enchere_active);
+            printf("[Superviseur] Envoi de l'avertissement de finalisation\n");
+            warning_sent = 1;
+        }
+    }
+    // If warning was sent and final timeout reached, finalize auction
+    else if (warning_sent && elapsed >= (INACTIVITY_TIMEOUT + FINALIZATION_TIMEOUT)) {
+        uint8_t final_msg[11];
+        if (msg_12(final_msg, current_bidder, current_numv, current_price) == 11) {
+            send_msg_enchere(final_msg, 11, p.enchere_active);
+            printf("[Superviseur] Finalisation de l'enchère - Gagnant: pair %u, Prix: %u\n", 
+                   current_bidder, current_price);
+            
+            // Clean up supervisor state
+            cleanup_auction_supervisor();
+        }
+    }
 }
 
 int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
@@ -75,6 +118,10 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
         // Update current auction state
         current_price = prix;
         current_bidder = bidder_id;
+        
+        // Reset the auction timer
+        reset_auction_timer();
+        
         return 0;
     }
 
@@ -94,6 +141,9 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
             
             // Store auction info
             p.encheres[p.enchere_active].numv = numv;
+            
+            // Initialize timer
+            reset_auction_timer();
             break;
             
         case 9: // Bid message
@@ -123,6 +173,15 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
         case 15: // Rejected bid (too low)
             printf("[Enchère] Offre rejetée (trop basse) de pair %u: NUMV=%u, PRIX=%u\n", 
                    id, numv, prix);
+            break;
+            
+        case 11: // Finalization warning
+            printf("[Enchère] Avertissement de finalisation reçu\n");
+            break;
+            
+        case 12: // Finalization message
+            printf("[Enchère] Enchère finalisée - Gagnant: pair %u, Prix: %u\n", 
+                   id, prix);
             break;
     }
 }

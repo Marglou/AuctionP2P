@@ -14,6 +14,10 @@ void init_auction_supervisor();
 // Clean up supervisor state
 void cleanup_auction_supervisor();
 
+// Timer management
+void reset_auction_timer();
+void check_auction_timeout();
+
 // Validate a bid and handle rejection/acceptance
 int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix);
 

@@ -98,6 +98,20 @@ typedef struct {
     unsigned char signature[ED25519_SIGNATURE_SIZE];  // signature Ed25519 (64 octets)
 } EnchereMessage;
 
+typedef struct {
+    uint8_t code;     // = 11
+    uint16_t id;      // ID du superviseur
+    uint32_t numv;    // Numéro de vente
+    uint32_t prix;    // Prix de la dernière enchère validée ou prix initial
+} FinalizationWarningMessage;
+
+typedef struct {
+    uint8_t code;     // = 12
+    uint16_t id;      // ID du gagnant ou du superviseur
+    uint32_t numv;    // Numéro de vente
+    uint32_t prix;    // Prix final de l'enchère
+} FinalizationMessage;
+
 // Déclaration des structures pour la récupération des champs
 // Structure unique pour tous les messages
 struct message_4 {
@@ -191,7 +205,11 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere);
 
 int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix);
 int msg_14_15(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix);
+int msg_11(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix);
+int msg_12(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix);
 int parse_msg_8_9_10(uint8_t *msg, size_t msg_len, struct message_8 *msg_struct);
+int parse_msg_11(uint8_t *msg, size_t msg_len, FinalizationWarningMessage *msg_struct);
+int parse_msg_12(uint8_t *msg, size_t msg_len, FinalizationMessage *msg_struct);
 
 int msg_1 (const struct message_1 *msg, unsigned char **buf_out, size_t *buf_len);
 int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_out);
@@ -212,6 +230,5 @@ void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix);
 //                          const unsigned char *message, size_t message_len,
 //                          const unsigned char *signature);
 int get_adresse_perso_from_socket(int sock, struct in6_addr *addr);
-
 
 #endif // MESSAGE_H

@@ -958,3 +958,95 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
 //         send(socket, msg, msg_len, 0);
 //     }
 // }
+
+// Function to create finalization warning message (code 11)
+int msg_11(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix) {
+    if (!msg) return -1;
+    
+    msg[0] = 11; // Message code
+    
+    // ID (2 bytes, network byte order)
+    uint16_t id_net = htons(id);
+    memcpy(&msg[1], &id_net, sizeof(id_net));
+    
+    // NUMV (4 bytes, network byte order)
+    uint32_t numv_net = htonl(numv);
+    memcpy(&msg[3], &numv_net, sizeof(numv_net));
+    
+    // PRIX (4 bytes, network byte order)
+    uint32_t prix_net = htonl(prix);
+    memcpy(&msg[7], &prix_net, sizeof(prix_net));
+    
+    return 11; // Total message size
+}
+
+// Function to create finalization message (code 12)
+int msg_12(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix) {
+    if (!msg) return -1;
+    
+    msg[0] = 12; // Message code
+    
+    // ID (2 bytes, network byte order)
+    uint16_t id_net = htons(id);
+    memcpy(&msg[1], &id_net, sizeof(id_net));
+    
+    // NUMV (4 bytes, network byte order)
+    uint32_t numv_net = htonl(numv);
+    memcpy(&msg[3], &numv_net, sizeof(numv_net));
+    
+    // PRIX (4 bytes, network byte order)
+    uint32_t prix_net = htonl(prix);
+    memcpy(&msg[7], &prix_net, sizeof(prix_net));
+    
+    return 11; // Total message size
+}
+
+// Function to parse finalization warning message (code 11)
+int parse_msg_11(uint8_t *msg, size_t msg_len, FinalizationWarningMessage *msg_struct) {
+    if (!msg || !msg_struct || msg_len < 11) return -1;
+    
+    msg_struct->code = msg[0];
+    if (msg_struct->code != 11) return -1;
+    
+    // Parse ID (2 bytes)
+    uint16_t id_net;
+    memcpy(&id_net, &msg[1], sizeof(id_net));
+    msg_struct->id = ntohs(id_net);
+    
+    // Parse NUMV (4 bytes)
+    uint32_t numv_net;
+    memcpy(&numv_net, &msg[3], sizeof(numv_net));
+    msg_struct->numv = ntohl(numv_net);
+    
+    // Parse PRIX (4 bytes)
+    uint32_t prix_net;
+    memcpy(&prix_net, &msg[7], sizeof(prix_net));
+    msg_struct->prix = ntohl(prix_net);
+    
+    return 0;
+}
+
+// Function to parse finalization message (code 12)
+int parse_msg_12(uint8_t *msg, size_t msg_len, FinalizationMessage *msg_struct) {
+    if (!msg || !msg_struct || msg_len < 11) return -1;
+    
+    msg_struct->code = msg[0];
+    if (msg_struct->code != 12) return -1;
+    
+    // Parse ID (2 bytes)
+    uint16_t id_net;
+    memcpy(&id_net, &msg[1], sizeof(id_net));
+    msg_struct->id = ntohs(id_net);
+    
+    // Parse NUMV (4 bytes)
+    uint32_t numv_net;
+    memcpy(&numv_net, &msg[3], sizeof(numv_net));
+    msg_struct->numv = ntohl(numv_net);
+    
+    // Parse PRIX (4 bytes)
+    uint32_t prix_net;
+    memcpy(&prix_net, &msg[7], sizeof(prix_net));
+    msg_struct->prix = ntohl(prix_net);
+    
+    return 0;
+}
