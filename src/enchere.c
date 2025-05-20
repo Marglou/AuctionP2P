@@ -315,8 +315,6 @@ int msg_join_enchere()
                str_ip,
                p.encheres[p.enchere_active].port_enchere);
 
-        close(socket_P);
-
         // Join the auction with the received information
         if (join_enchere(p.encheres[p.enchere_active].id_enchere, 
                         str_ip, 
@@ -324,8 +322,12 @@ int msg_join_enchere()
             fprintf(stderr, "Erreur lors de la jointure de l'enchère.\n");
             memset(&p.encheres[p.enchere_active], 0, sizeof(EnchereSocket));
             p.enchere_active = enchere_precedente; // Reset active auction
+            send(socket_P, "erreur", 6, 0);
+            close(socket_P);
             return -1;
         }
+        //printf("nb de pairs enchere %d\n",p.encheres[p.enchere_active].nb_pairs);
+        close(socket_P);
         return 0;
     }
 

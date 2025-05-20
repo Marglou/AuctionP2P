@@ -175,7 +175,6 @@ void peer_start(const char *nom) {
 
     // Définition de l'interface multicast (ex: en0)
     p.adr_liaison.mreq.ipv6mr_interface = p.global_iface_index;
-    printf("tete:%d\n", p.adr_liaison.mreq.ipv6mr_interface);
 
     // Abonnement au groupe multicast
     if (setsockopt(p.adr_liaison.sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
@@ -316,7 +315,6 @@ void *listen_tcp_thread(void *arg) {
                             }
                         } if (id_exists==false && p.num_peers < MAX_PEERS) {
                             
-                            //uint16_t new_id = 10;  // À définir selon ta logique
                             uint8_t msg[1];
                             int msg_len = msg_50(msg);
 
@@ -328,7 +326,7 @@ void *listen_tcp_thread(void *arg) {
                                 ntohs(parsed_msg.port),parsed_msg.id);
                             }
                         }else{
-                            uint16_t new_id = (int)rand()%25;  // À définir selon ta logique
+                            uint16_t new_id = (int)rand()%25;  // À revoir
                             uint8_t msg[3];
                             int msg_len = msg_51(msg, new_id);
 
@@ -336,8 +334,6 @@ void *listen_tcp_thread(void *arg) {
                                 perror("send msg_51");
                             } else {
                                 printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",inet_ntoa(*(struct in_addr *)&parsed_msg.ip),ntohs(parsed_msg.port), new_id);
-                                // Ajouter le nouveau pair à la liste
-                                //p.discovered_peers[position_enr].id = new_id;
                                 parsed_msg.id=new_id;
                             }
                         }
@@ -372,15 +368,16 @@ void *listen_tcp_thread(void *arg) {
                         envoyer_infos_peers(client_sock, &p.encheres[0]);
 
                         printf("Message 7 envoyé à P SUCCES.\n");
-                        // close(client_sock);
                         shutdown(client_sock, SHUT_WR);
 
+                        // VERIFIE QUE P A REJOINT l'ENCHERE AVANT AJOUT 
                         uint8_t stop [BUF_SIZE];
                         ssize_t len = recv(client_sock, stop, BUF_SIZE, 0);
                         if (len > 0) {
                             stop[len] = '\0';
                             printf("Message reçu de P : %s\n", stop);
                             close(client_sock);
+                            continue;
             
                         } else if (len == 0) {
                             printf("Connexion fermée par le pair.\n");
@@ -388,16 +385,28 @@ void *listen_tcp_thread(void *arg) {
                         } else {
                             perror("recv");
                             close(client_sock);
-                         }
+                        }
 
-                        //ICI
+                        printf("\n\n");
+                        //Message 6, connexion aux autres peers
                         printf("id=%d\n",parsed_msg.id);
-                        connect_to_peers_and_send_info(p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
-                        printf("envoye a tous is good\n");
+                        printf("nb participants enchere %d\n", p.encheres[p.enchere_active].nb_pairs);
+                        if (p.encheres[p.enchere_active].nb_pairs == 1){
+                            printf("enchere avec une personne\n");
+                        } else {
+                            printf("nb participants enchere %d\n", p.encheres[p.enchere_active].nb_pairs);
+                            connect_to_peers_and_send_info(p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
+                            printf("envoye a tous is good\n");                            
+                        }
+
+                        add_peer(p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
+                        p.encheres[p.enchere_active].nb_pairs++;                       
+                        printf("nb participants enchere %d\n", p.encheres[p.enchere_active].nb_pairs);
                     }
                 }
 
-            }else if(peekbuf[0] == 6){
+            } else if(peekbuf[0] == 6){
+                printf("MESSAGE 6 RECU\n");
                 uint8_t buffer[BUF_SIZE];
                 ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
                 struct message_6 msg={0};
@@ -406,14 +415,14 @@ void *listen_tcp_thread(void *arg) {
                 }
                 add_peer(&p.encheres[p.enchere_active].liste_participants,msg.id,msg.ip,msg.port,msg.cle);
                 p.encheres[p.enchere_active].nb_pairs++;
-                printf("info message 6 recu paire ajouté\n");
+                printf("info message 6 recu paire ajouté : %d\n", p.encheres[p.enchere_active].nb_pairs);
                 close(client_sock);
 
             }
-                close(client_sock);
-            }
+            close(client_sock);
+        }
 
-        } 
+    } 
     return NULL;         
 }
 
@@ -577,11 +586,6 @@ int gestion_reception_TCP(int client_fd, struct tcp_listener_state* listener) {
     printf("Gestion de la réception TCP...\n");
     struct sockaddr_in6 client_addr = {0};
     socklen_t addr_len = sizeof(client_addr);
-    // int client_sock = accept(p.socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
-    // if (client_sock < 0) {
-    //     perror("accept");
-    //     return -1;
-    // }
 
     uint8_t peekbuf[1];
     ssize_t peeklen = recv(client_fd, peekbuf, 1, MSG_PEEK);
@@ -649,15 +653,13 @@ int gestion_reception_TCP(int client_fd, struct tcp_listener_state* listener) {
                                 inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
                                 ntohs(parsed_msg.port), parsed_msg.id);
                 }
-                else
-                {
+                else {
                     uint16_t new_id = rand() % 25;
                     uint8_t msg[3];
                     int msg_len = msg_51(msg, new_id);
-                    if (send(client_fd, msg, msg_len, 0) != msg_len)
+                    if (send(client_fd, msg, msg_len, 0) != msg_len) {
                         perror("send msg_51");
-                    else
-                    {
+                    } else {
                         printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",
                                 inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
                                 ntohs(parsed_msg.port), new_id);
@@ -704,28 +706,32 @@ int gestion_reception_TCP(int client_fd, struct tcp_listener_state* listener) {
 
 
 void* listen_main_sockets(void* arg) {
-    // struct tcp_listener_state* listener = (struct tcp_listener_state*)arg;
     struct pollfd fds[3] = {0};
     nfds_t n = 3;
 
     fds[0].fd = p.adr_liaison.sock;  // Multicast
     fds[0].events = POLLIN;
 
-    fds[1].fd = p.listener_tcp.socket_udp;        // Unicast UDP
+    fds[1].fd = p.socket_udp;        // Unicast UDP
     fds[1].events = POLLIN;
 
     fds[2].fd = STDIN_FILENO;        // Claver
     fds[2].events = POLLIN;
 
-    // fds[3].fd = listener->p.socket_tcp;      // TCP
+    // fds[3].fd = p.socket_tcp;      // TCP
     // fds[3].events = POLLIN;
 
     while (1) {
-        int ret = poll(fds, n, -1);  // bloquant
+        int ret = poll(fds, n, 10000);  // bloquant
 
         if (ret < 0) {
             perror("poll");
             break;
+        }
+
+        if (ret == 0){
+            printf("delai ecoule\n");
+            continue;
         }
 
         // SOCKET MULTICAST
@@ -742,19 +748,6 @@ void* listen_main_sockets(void* arg) {
                 fprintf(stderr, "Erreur lors de la réception du message unicast.\n");
             }
         }
-
-        // SOCKET TCP
-        // if (fds[3].revents & POLLIN) {
-        //     struct sockaddr_in6 cli_addr;
-        //     int client_fd = accept(listener->p.socket_tcp, (struct sockaddr*)&cli_addr, sizeof(cli_addr));
-        //     if (client_fd >= 0) {
-        //         if (gestion_reception_TCP(client_fd, listener) < 0) {
-        //             fprintf(stderr, "Erreur lors de la réception du message TCP.\n");
-        //         }
-        //     } else {
-        //         perror("accept TCP");
-        //     }
-        // }
 
         // ENTRÉE CLAVIER
         if (fds[2].revents & POLLIN) {
@@ -926,7 +919,7 @@ void clean_peer() {
             current=current->next;
             continue;
          }
-         int sock = connexion_TLS(current->ip, current->port_tcp);
+         int sock = connexion_TCP(current->ip, current->port_tcp);
          if (sock < 0) {
              fprintf(stderr, "Failed to create TLS connection to peer %d\n", current->id);
              current = current->next;
@@ -945,38 +938,14 @@ void clean_peer() {
              continue;
          }
 
-//         // If we're in an active auction, send auction information
-         /*if (p.enchere_active >= 0) {
-             // Create message content with auction info
-             char message[256];
-             snprintf(message, sizeof(message), "AUCTION_INFO %s %u", 
-                     encheres[p.enchere_active].id, encheres[p.enchere_active].sock);
-            
-//             // Sign the message
-             unsigned char signature[crypto_sign_BYTES];
-             if (crypto_sign_detached(signature, NULL, 
-                                    (const unsigned char *)message, strlen(message),
-                                   my_privkey) != 0) {
-                 fprintf(stderr, "Failed to sign auction info message\n");
-                 close(sock);
-                 current = current->next;
-                 continue;
-             }
-
-//             // Send auction information
-             envoyer_info_auction(sock, atoi(p.id_peer), p.cpt, 0, 
-                                (const unsigned char *)message, strlen(message),
-                                signature);
-         }*/
-
-//         // Read response
+        // Read response
          uint8_t response[2];
          int bytes_read = recv(sock, response, 2, 0);
          if (bytes_read == 0) {
             printf("envoye ok msg 6\n");
-             close(sock);
+            close(sock);
             current = current->next;
-             continue;
+            continue;
          }
 
          close(sock);

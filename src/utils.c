@@ -67,7 +67,6 @@ int get_ipv6_address(char *buf, size_t buflen) {
         if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET6)
             continue;
 
-        // ❌ Ignorer les interfaces loopback (comme lo0)
         if (ifa->ifa_flags & IFF_LOOPBACK)
             continue;
 
@@ -78,7 +77,6 @@ int get_ipv6_address(char *buf, size_t buflen) {
             IN6_IS_ADDR_UNSPECIFIED(&addr6->sin6_addr))
             continue;
 
-        // ✅ Optionnel : tu peux garder ou non cette ligne selon ton cas
         // Pour l’instant, on accepte les adresses lien-local (fe80::/10)
         // Si tu veux les exclure : if (IN6_IS_ADDR_LINKLOCAL(&addr6->sin6_addr)) continue;
 

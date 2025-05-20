@@ -22,6 +22,49 @@
 #include "../include/utils.h"
 #include "../include/securite.h"
 
+int connexion_TCP (struct in6_addr ip, uint16_t port){
+    char ip_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
+    printf("Connexion TCP à %s:%u...\n", ip_str, (port)); 
+
+    // Create socket
+    int socket_tcp_client = socket(PF_INET6, SOCK_STREAM, 0);
+    if (socket_tcp_client < 0) {
+        perror("socket TCP");
+        // SSL_free(ssl);
+        // SSL_CTX_free(ctx);
+        return -1;
+    }
+
+    // Set socket options
+    struct timeval tv;
+    tv.tv_sec = 5;  // 5 seconds timeout
+    tv.tv_usec = 0;
+    setsockopt(socket_tcp_client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(socket_tcp_client, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+    // Set up connection address
+    struct sockaddr_in6 dest = {0};
+    dest.sin6_family = AF_INET6;
+    dest.sin6_port = htons(port);  // Port is already in network byte order
+    dest.sin6_addr = ip;
+    if (IN6_IS_ADDR_LINKLOCAL(&ip)) {
+        dest.sin6_scope_id = p.global_iface_index;
+    }
+    dest.sin6_scope_id = p.global_iface_index;
+
+    // Connect
+    if (connect(socket_tcp_client, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+        perror("connect");
+        // SSL_free(ssl);
+        // SSL_CTX_free(ctx);
+        close(socket_tcp_client);
+        return -1;
+    }
+    
+    return socket_tcp_client;
+}
+
 int connexion_TLS(struct in6_addr ip, uint16_t port) {
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
