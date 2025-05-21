@@ -375,6 +375,7 @@ void *listen_tcp_thread(void *arg) {
                         bool id_exists = false;
                         int count=0;
                         int position_enr=0;
+                            
                         for (int i = 0; i < p.num_peers; ++i) {
                             if (p.discovered_peers[i].id == parsed_msg.id) {
                                 count++;
@@ -384,6 +385,7 @@ void *listen_tcp_thread(void *arg) {
                                 position_enr=i;
                                 break;
                             }
+ 
                         } if (id_exists==false && p.num_peers < MAX_PEERS) {
                             
                             uint8_t msg[1];
@@ -467,18 +469,18 @@ void *listen_tcp_thread(void *arg) {
                         printf("\n\n");
                         //Message 6, connexion aux autres peers
                         printf("id=%d\n",parsed_msg.id);
-                        printf("nb participants enchere %d\n", p.encheres[p.enchere_active].nb_pairs);
+                        printf("nb participants enchere 1 %d\n", p.encheres[p.enchere_active].nb_pairs);
                         if (p.encheres[p.enchere_active].nb_pairs == 1){
                             printf("enchere avec une personne\n");
                         } else {
-                            printf("nb participants enchere %d\n", p.encheres[p.enchere_active].nb_pairs);
+                            printf("nb participants enchere 2 %d\n", p.encheres[p.enchere_active].nb_pairs);
                             connect_to_peers_and_send_info(p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
                             printf("envoye a tous is good\n");                            
                         }
 
                         add_peer(&p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
                         p.encheres[p.enchere_active].nb_pairs++;                       
-                        printf("nb participants enchere %d\n", p.encheres[p.enchere_active].nb_pairs);
+                        printf("nb participants enchere 3 %d\n", p.encheres[p.enchere_active].nb_pairs);
                     }
                 }
 
@@ -600,7 +602,7 @@ int gestion_reception_UDP() {
 
     buf[n] = '\0';
     // Gestion des messages avec code
-    if (buf[0] == 4 && p.num_peers >= 0) {
+    if (buf[0] == 4 && p.num_peers >= 0 && p.join_en_cours == 0) {
         struct message_4 parsed_msg;
         if (parse_msg_4(buf, len, &parsed_msg) == 0)
         {
@@ -616,6 +618,7 @@ int gestion_reception_UDP() {
                    p.discovered_peers[p.num_peers-1].id, ip_str, p.discovered_peers[p.num_peers - 1].port_tcp);
 
             if (p.num_peers > 0) {
+                p.join_en_cours = 1;
                 struct peer_info *peer_Q = &p.discovered_peers[0];
                 char ip_str[INET6_ADDRSTRLEN];
                 inet_ntop(AF_INET6, &peer_Q->ip, ip_str, sizeof(ip_str));
@@ -678,6 +681,7 @@ int gestion_reception_UDP() {
                     p.encheres[p.enchere_active].port_enchere);
 
                 // Join the auction with the received information
+                printf("\n");
                 if (join_enchere(p.encheres[p.enchere_active].id_enchere, 
                                 str_ip, 
                                 p.encheres[p.enchere_active].port_enchere) != 0) {
@@ -690,14 +694,17 @@ int gestion_reception_UDP() {
                     // cleanup_ssl_connection(ssl);
                     return -1;
                 }
-                //printf("nb de pairs enchere %d\n",p.encheres[p.enchere_active].nb_pairs);
+                // printf("nb de pairs enchere %d\n",p.encheres[p.enchere_active].nb_pairs);
+             
+                p.num_peers = 0;
+                memset(&p.discovered_peers, 0, sizeof(p.discovered_peers));
                 close(socket_P);
                 // cleanup_ssl_connection(ssl);
-        return 0;
-    }
+                return 0;
+            }
 
-    printf("Aucune enchère trouvée. Création d'une nouvelle.\n");
-    creer_enchere();
+            printf("Aucune enchère trouvée. Création d'une nouvelle.\n");
+            creer_enchere();
             return 0;
         }
     } else if (buf[0] == 1) {
@@ -935,6 +942,7 @@ void* listen_main_sockets(void* arg) {
                     continue;
                 }
                 else if (strcmp(input, "join") == 0) {
+                    p.join_en_cours = 0;  // Réinitialiser le flag pour rejoindre une enchère
                     if (msg_join_enchere() == -1) {
                         printf("Erreur lors de l'envoi de la demande de rejoindre l'enchère.\n");
                     }

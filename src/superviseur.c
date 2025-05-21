@@ -141,7 +141,7 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
 void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
     switch (code) {
         case 8: // Auction initiation
-            printf("[Enchère] Nouvelle enchère initiée par pair %u: NUMV=%u, PRIX=%u\n", 
+            printf("[Enchère] Nouvelle vente initiée par pair %u: NUMV=%u, PRIX=%u\n", 
                    id, numv, prix);
             
             // // Update auction state

@@ -72,8 +72,8 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
     if (socket_tcp_client < 0) {
         perror("socket TCP");
         // SSL_free(ssl);
-        // return -1;
-        return NULL;
+        return -1;
+        // return NULL;
     }
 
     // Set socket options
@@ -97,8 +97,8 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
     if (connect(socket_tcp_client, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
         perror("connect");
         close(socket_tcp_client);
-        // return -1;
-        return NULL;
+        return -1;
+        // return NULL;
     }
 
     // // Create SSL structure

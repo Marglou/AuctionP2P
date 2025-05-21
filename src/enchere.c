@@ -252,7 +252,7 @@ int msg_join_enchere()
    // AJOUTER MUTEX OU AUTRE CHOSE A VOIR 
         printf("Reponse recue %d\n", p.listener_tcp.response_received);
         printf("Tentative %d : envoi du message CODE 3.\n", attempts);
-        uint8_t msg[3] = {3};
+        char msg[3] = {3};
         // uint16_t port_p = htons(p.port_perso);
         // memcpy(&msg[1], &port_p, 2);
 
@@ -298,7 +298,7 @@ void *auction_receiver(void *arg)
                 size_t siglen = 0;
 
                 // Signature du message
-                if (!sign(p.ed_privkey, message, &signature, &siglen)) {
+                if (!sign(p.ed_privkey, (unsigned char*)message, &signature, &siglen)) {
                     fprintf(stderr, "Erreur lors de la signature\n");
                     return -1;
                 }

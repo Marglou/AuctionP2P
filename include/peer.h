@@ -87,6 +87,7 @@ typedef struct {
     int enchere_active;
     int cpt;
     struct Multicast adr_liaison;
+    int join_en_cours; // Indique si le pair est en cours de jointure
 } Peer;
 
 typedef struct {
