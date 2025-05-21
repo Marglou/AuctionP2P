@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/stat.h>  // pour mkdir
-#include <sys/types.h> // optionnel, mais recommandé avec mkdir
+#include <sys/stat.h>  
+#include <sys/types.h> 
 #include <unistd.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
@@ -11,12 +11,21 @@
 #include <openssl/rsa.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
 
 #include "../include/peer.h"
 
 static peer_key peers[MAX_PEERS];
 static int peer_count = 0;
 
+void cleanup_ssl_connection(SSL *ssl) {
+    if (ssl) {
+        int sock = SSL_get_fd(ssl);
+        SSL_shutdown(ssl);
+        if (sock >= 0) close(sock);
+        SSL_free(ssl);
+    }
+}
 
 /* Initialisation OpenSSL */
 void init_openssl() {
@@ -201,10 +210,61 @@ int verify(EVP_PKEY *pubkey, unsigned char *msg, unsigned char *sig, size_t slen
 }
 
 
+// Génère un certificat auto-signé à partir d'une clé privée PEM
+int generer_certificat_autosigne(const char *keyfile, const char *certfile, const char *common_name) {
+    FILE *fp = fopen(keyfile, "r");
+    if (!fp) {
+        fprintf(stderr, "Erreur ouverture clé privée : %s\n", keyfile);
+        return 0;
+    }
+    EVP_PKEY *pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL);
+    fclose(fp);
+    if (!pkey) {
+        fprintf(stderr, "Erreur lecture clé privée\n");
+        return 0;
+    }
 
+    X509 *x509 = X509_new();
+    if (!x509) {
+        EVP_PKEY_free(pkey);
+        return 0;
+    }
+    X509_set_version(x509, 2);
+    ASN1_INTEGER_set(X509_get_serialNumber(x509), 1);
+    X509_gmtime_adj(X509_get_notBefore(x509), 0);
+    X509_gmtime_adj(X509_get_notAfter(x509), 31536000L); // 1 an
+
+    X509_set_pubkey(x509, pkey);
+
+    X509_NAME *name = X509_get_subject_name(x509);
+    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char*)common_name, -1, -1, 0);
+    X509_set_issuer_name(x509, name);
+
+    if (!X509_sign(x509, pkey, NULL)) {
+        fprintf(stderr, "Erreur signature certificat\n");
+        X509_free(x509);
+        EVP_PKEY_free(pkey);
+        return 0;
+    }
+
+    fp = fopen(certfile, "wb");
+    if (!fp) {
+        fprintf(stderr, "Erreur création fichier certificat : %s\n", certfile);
+        X509_free(x509);
+        EVP_PKEY_free(pkey);
+        return 0;
+    }
+    PEM_write_X509(fp, x509);
+    fclose(fp);
+
+    X509_free(x509);
+    EVP_PKEY_free(pkey);
+    return 1;
+}
 
 void init_superviseur()
 {
+	SSL_library_init();
     OpenSSL_add_all_algorithms();
     peer_count = 0;
 }
@@ -276,15 +336,6 @@ int generate_certificate_for_peer(const char *peer_name, char *cert_path, size_t
     snprintf(cert_path, cert_path_size, "%s/cert.pem", dir_path);
 
     // Générer la clé privée ed25519
-    char genkey_cmd[512];
-    snprintf(genkey_cmd, sizeof(genkey_cmd),
-             "openssl genpkey -algorithm ed25519 -out %s >/dev/null 2>&1", key_path);
-
-    if (system(genkey_cmd) != 0)
-    {
-        fprintf(stderr, "Erreur génération clé ed25519\n");
-        return -1;
-    }
 
     // Générer un certificat auto-signé à partir de la clé
     char req_cmd[1024];
@@ -300,35 +351,6 @@ int generate_certificate_for_peer(const char *peer_name, char *cert_path, size_t
 
     return 0;
 }
-
-int get_public_key_size(const char *cert_path) {
-    FILE *fp = fopen(cert_path, "r");
-    if (!fp) {
-        perror("fopen");
-        return -1;
-    }
-
-    X509 *cert = PEM_read_X509(fp, NULL, NULL, NULL);
-    fclose(fp);
-    if (!cert) {
-        fprintf(stderr, "Erreur lecture certificat\n");
-        return -1;
-    }
-
-    EVP_PKEY *pubkey = X509_get_pubkey(cert);
-    X509_free(cert);
-    if (!pubkey) {
-        fprintf(stderr, "Erreur extraction clé publique\n");
-        return -1;
-    }
-
-    int size_bytes = EVP_PKEY_get_size(pubkey);  // Pour Ed25519 : 32
-    EVP_PKEY_free(pubkey);
-
-    return size_bytes;
-}
-
-
 
 
 

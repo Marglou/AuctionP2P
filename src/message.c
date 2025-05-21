@@ -1,5 +1,4 @@
 // message.c
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -8,6 +7,7 @@
 #include <arpa/inet.h> // Pour htonl et htons
 #include <openssl/evp.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <openssl/pem.h>
 #include <unistd.h> // pour close()
 #include <netinet/in.h> // Pour les fonctions de conversion de réseau
@@ -763,6 +763,7 @@ int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
     // Lire les données jusqu'à ce que 23 octets soient reçus
     // while (total_received < 23) {
         ssize_t received = recv(socket, buffer + total_received, 23 - total_received, 0);
+    // ssize_t received = SSL_read(socket, buffer + total_received, sizeof(buffer) - total_received);
         if (received < 0) {
             perror("Erreur lors de la réception des données TCP");
             return -1;
@@ -888,6 +889,7 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
     // Lire les données jusqu'à ce que 133 octets soient reçus
     while (total_received < sizeof(buffer)) {
         ssize_t received = recv(socket, buffer + total_received, sizeof(buffer) - total_received, 0);
+        // ssize_t received = SSL_read(socket, buffer + total_received, sizeof(buffer) - total_received);
         if (received < 0) {
             perror("Erreur lors de la réception des données TCP");
             return -1;

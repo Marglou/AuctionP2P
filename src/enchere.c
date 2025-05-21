@@ -251,8 +251,8 @@ int msg_join_enchere()
         printf("Reponse recue %d\n", p.listener_tcp.response_received);
         printf("Tentative %d : envoi du message CODE 3.\n", attempts);
         uint8_t msg[3] = {3};
-        uint16_t port_p = htons(p.port_perso);
-        memcpy(&msg[1], &port_p, 2);
+        // uint16_t port_p = htons(p.port_perso);
+        // memcpy(&msg[1], &port_p, 2);
 
         if (send_multicast(p.socket_udp, msg, sizeof(msg)) != 0) {
             fprintf(stderr, "Erreur lors de l'envoi du message de demande de jointure.\n");

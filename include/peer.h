@@ -65,6 +65,9 @@ typedef struct {
     struct sockaddr_in6 adr_perso;
     EVP_PKEY *ed_privkey;
     EVP_PKEY *ed_pubkey;
+    char *cert_path;
+
+    SSL_CTX *ctx;
 
     int global_iface_index;
     int socket_tcp;

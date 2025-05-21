@@ -6,6 +6,7 @@
 
 #define MAX_PEERS 5
 
+void cleanup_ssl_connection(SSL *ssl);
 void init_superviseur();
 void cleanup_superviseur();
 int register_peer(const char *name, EVP_PKEY *pubkey);
@@ -15,9 +16,8 @@ int verify_message(EVP_PKEY *pubkey, const unsigned char *msg, size_t msglen,
                    const unsigned char *sig, size_t siglen);
 
 int generate_certificate_for_peer(const char *peer_name, char *cert_path, size_t cert_path_size, char *key_path, size_t key_path_size);
-int get_public_key_size(const char *cert_path);
 int generate_ed25519_keypair_and_extract_CLE(const char *key_path, unsigned char *CLE);
-
+int generer_certificat_autosigne(const char *keyfile, const char *certfile, const char *common_name);
 
 void init_openssl();
 

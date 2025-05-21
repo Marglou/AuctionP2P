@@ -13,6 +13,8 @@
 #include "../include/utils.h"
 
 #include <fcntl.h>  // pour fcntl()
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 int set_socket_nonblocking(int sockfd) {
     int flags = fcntl(sockfd, F_GETFL, 0);
@@ -90,7 +92,7 @@ int get_ipv6_address(char *buf, size_t buflen) {
 
         struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)ifa->ifa_addr;
 
-        // ❌ Ignorer les adresses :: (non spécifiées) et ::1 (loopback)
+        // Ignorer les adresses :: (non spécifiées) et ::1 (loopback)
         if (IN6_IS_ADDR_LOOPBACK(&addr6->sin6_addr) ||
             IN6_IS_ADDR_UNSPECIFIED(&addr6->sin6_addr))
             continue;
@@ -274,8 +276,92 @@ int create_perso_adr_sockets(struct sockaddr_in6 ip, unsigned int scope_id,
     }
 
     return 0;
-}
+} 
 
+/* // Fonction qui crée les deux sockets
+int create_perso_adr_sockets(struct sockaddr_in6 ip, unsigned int scope_id,
+                             int *tcp_sock, int *udp_sock,
+                             uint16_t port, char *priv) {
+    
+    char ip_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &ip.sin6_addr, ip_str, sizeof(ip_str));
+    printf("IPv6: %s\n", ip_str);
+    printf("Port: %d\n", ntohs(ip.sin6_port));
+    printf("Scope ID: %u\n", ip.sin6_scope_id);
+
+
+	// l'objet SSL_CTX ctx utilisera notre certificat signé par nous-même
+	//    et notre clé
+	if (!SSL_CTX_use_certificate_file(p.ctx, p.cert_path , SSL_FILETYPE_PEM) ||
+	    !SSL_CTX_use_PrivateKey_file(p.ctx, priv, SSL_FILETYPE_PEM)) {
+		fprintf(stderr, "echec SSL_CTX_use_certificate_file()\n");
+		ERR_print_errors_fp(stderr);
+		return 1;
+	}
+
+    // Créer socket TCP
+    *tcp_sock = socket(PF_INET6, SOCK_STREAM, 0);
+    if (*tcp_sock < 0) {
+        perror("socket TCP");
+        return -1;
+    }
+
+    int reuse = 1;
+    // Réutilisation des adresses et des ports avant bind
+    if (setsockopt(*tcp_sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+        perror("setsockopt TCP SO_REUSEADDR");
+        close(*tcp_sock);
+        return -1;
+    }
+    if (setsockopt(*tcp_sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
+        perror("setsockopt TCP SO_REUSEPORT");
+        close(*tcp_sock);
+        return -1;
+    }
+
+    if (bind(*tcp_sock, (struct sockaddr *)&ip, sizeof(ip)) < 0) {
+        perror("bind TCP");
+        close(*tcp_sock);
+        return -1;
+    }
+    if (listen(*tcp_sock, 5) < 0) {
+        perror("listen TCP");
+        close(*tcp_sock);
+        return -1;
+    }
+
+    // Création socket IPv6 UDP
+    *udp_sock = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (*udp_sock < 0) {
+        perror("socket");
+        close(*tcp_sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // Réutilisation des adresses et des ports pour UDP avant bind
+    if (setsockopt(*udp_sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+        perror("setsockopt UDP SO_REUSEADDR");
+        close(*tcp_sock);
+        close(*udp_sock);
+        return -1;
+    }
+    if (setsockopt(*udp_sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
+        perror("setsockopt UDP SO_REUSEPORT");
+        close(*tcp_sock);
+        close(*udp_sock);
+        return -1;
+    }
+
+    // Bind unicast socket
+    if (bind(*udp_sock, (struct sockaddr*)&ip, sizeof(ip)) < 0) {
+        perror("bind unicast");
+        close(*udp_sock);
+        close(*tcp_sock);
+        return -1;
+    }
+
+    return 0;
+} */
 
 // Envoie un message sur une adresse multicast IPv6
 int send_UDP (int sock, struct sockaddr_in6 *multicast_addr, char *msg, size_t msg_len) {

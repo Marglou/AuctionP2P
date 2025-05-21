@@ -93,6 +93,20 @@ void peer_start(const char *nom) {
         /*
 	    verify(pubkey, msg, signature, slen);
         */
+           // Après avoir généré la clé privée "serv.key"
+        // Générer un certificat auto-signé
+        char cert_path[256];        
+        snprintf(cert_path, sizeof(cert_path), "%s_cert.pem", p.pseudo);
+        p.cert_path = strdup(cert_path);
+        if (p.cert_path == NULL) {
+            perror("Erreur d'allocation mémoire pour le cert_path");
+            exit(EXIT_FAILURE);
+        }
+        if (!generer_certificat_autosigne(ed_priv, cert_path, p.pseudo)) {
+            fprintf(stderr, "Erreur génération certificat auto-signé\n");
+            exit(1);
+        }
+    //    generate_certificate_for_peer(p.pseudo, ed_pub, sizeof(ed_pub), ed_priv, sizeof(ed_priv));
         printf("Clés ED25519 générées et enregistrées avec succès.\n");
     } else {
         fprintf(stderr, "Erreur lors de la génération des clés ED25519.\n");
@@ -105,6 +119,13 @@ void peer_start(const char *nom) {
         free(p.pseudo);
         exit(EXIT_FAILURE);
     }  
+
+    p.ctx = SSL_CTX_new(TLS_server_method());
+    if (!p.ctx) {
+        fprintf(stderr, "Erreur lors de la création du contexte SSL.\n");
+        free(p.pseudo);
+        exit(EXIT_FAILURE);
+    }
 
 // ----------------------- Adresse perso IPv6 TCP/UDP ---------------------------------------------------------------
 
@@ -146,6 +167,7 @@ void peer_start(const char *nom) {
 
     // Création sockets perso (TCP & UDP)
     if (create_perso_adr_sockets(p.adr_perso, p.global_iface_index, &p.socket_tcp, &p.socket_udp, p.port_perso) != 0) {
+    // if (create_perso_adr_sockets(p.adr_perso, p.global_iface_index, &p.socket_tcp, &p.socket_udp, p.port_perso, ed_priv) != 0) {
         printf("test:%d\n",p.global_iface_index);
         fprintf(stderr, "Erreur lors de la création des sockets perso TCP/UDP.\n");
         exit(EXIT_FAILURE);
@@ -269,15 +291,34 @@ void *listen_tcp_thread(void *arg) {
 
             struct sockaddr_in6 client_addr;
             socklen_t addr_len = sizeof(client_addr);
+            
             int client_sock = accept(state->socket_tcp, (struct sockaddr *)&client_addr, &addr_len);
             if (client_sock < 0) {
                 perror("accept");
                 continue;
             }
+            // SSL *ssl = SSL_new(p.ctx); 
+            // if (!ssl) {
+            //     fprintf(stderr, "Erreur lors de la création de l'objet SSL.\n");
+            //     close(client_sock);
+            //     continue;
+            // }
+            // SSL_set_fd(ssl, client_sock);
+            // if (SSL_accept(ssl) <= 0) {
+            //     fprintf(stderr, "Erreur lors de l'acceptation de la connexion SSL.\n");
+            //     ERR_print_errors_fp(stderr);
+            //     SSL_shutdown(ssl);
+            //     close(client_sock);
+            //     SSL_free(ssl);
+            //     continue;
+            // }
+
+            // printf ("connexion SSL/TLS avec %s --- %s\n", SSL_get_cipher(ssl), SSL_get_cipher_version(ssl));
 
             // Peek 1er octet sans consommer
             uint8_t peekbuf[1];
             ssize_t peeklen = recv(client_sock, peekbuf, 1, MSG_PEEK);
+            // ssize_t peeklen = SSL_peek(ssl, peekbuf, sizeof(peekbuf));
             if (peeklen <= 0) {
                 close(client_sock);
                 continue;
@@ -287,7 +328,10 @@ void *listen_tcp_thread(void *arg) {
                 // Connexion TCP simple (message 4 attendu)
                 uint8_t buffer[BUF_SIZE];
                 ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
+                // ssize_t len = SSL_read(ssl, buffer, sizeof(buffer));
                 if (len <= 0) {
+                    /* libération des ressources */
+                    // cleanup_ssl_connection(ssl);
                     close(client_sock);
                     continue;
                 }
@@ -307,12 +351,19 @@ void *listen_tcp_thread(void *arg) {
                         state->first_response_time = time(NULL);
                     }
                 }
+                // cleanup_ssl_connection(ssl);
                 close(client_sock);
 
             } else if (peekbuf[0] == 5) {
                 // Connexion TCP avec message 5
                 uint8_t buffer[BUF_SIZE];
                 ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
+                // ssize_t len = SSL_read(ssl, buffer, sizeof(buffer));
+                if (len <= 0) {
+                    // cleanup_ssl_connection(ssl);
+                    close(client_sock);
+                    continue;
+                }
                 if (len > 0 && buffer[0] == 5) {
                     struct message_5 parsed_msg;
                     if (parse_msg_5(buffer, len, &parsed_msg) == 0) {
@@ -340,6 +391,7 @@ void *listen_tcp_thread(void *arg) {
                             int msg_len = msg_50(msg);
 
                             if (send(client_sock, msg, msg_len, 0) != msg_len) {
+                            // if (SSL_write(ssl, msg, msg_len) != msg_len) {
                                 perror("send msg_50");
                             } else {
                                 printf("Message 50 envoyé à %s:%u avec ID=%u\n",
@@ -352,6 +404,7 @@ void *listen_tcp_thread(void *arg) {
                             int msg_len = msg_51(msg, new_id);
 
                             if (send(client_sock, msg, msg_len, 0) != msg_len) {
+                            // if (SSL_write(ssl, msg, msg_len) != msg_len) {
                                 perror("send msg_51");
                             } else {
                                 printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",inet_ntoa(*(struct in_addr *)&parsed_msg.ip),ntohs(parsed_msg.port), new_id);
@@ -369,8 +422,10 @@ void *listen_tcp_thread(void *arg) {
                         size_t total_sent = 0;
                         while (total_sent < taille) {
                             ssize_t sent = send(client_sock, buffer + total_sent, taille - total_sent, 0);
+                            // ssize_t sent = SSL_write(ssl, buffer + total_sent, taille - total_sent);
                             if (sent < 0) {
                                 perror("Erreur d'envoi du message");
+                                // cleanup_ssl_connection(ssl);
                                 close(client_sock);
                                 return NULL;
                             }
@@ -394,19 +449,21 @@ void *listen_tcp_thread(void *arg) {
                         // VERIFIE QUE P A REJOINT l'ENCHERE AVANT AJOUT 
                         uint8_t stop [BUF_SIZE];
                         ssize_t len = recv(client_sock, stop, BUF_SIZE, 0);
+                        // ssize_t len = SSL_read(ssl, stop, sizeof(stop));
                         if (len > 0) {
                             stop[len] = '\0';
                             printf("Message reçu de P : %s\n", stop);
+                            // cleanup_ssl_connection(ssl);
                             close(client_sock);
                             continue;
             
                         } else if (len == 0) {
                             printf("Connexion fermée par le pair.\n");
-                            close(client_sock);
                         } else {
                             perror("recv");
-                            close(client_sock);
                         }
+                        // cleanup_ssl_connection(ssl);
+                        close(client_sock);
 
                         printf("\n\n");
                         //Message 6, connexion aux autres peers
@@ -420,7 +477,7 @@ void *listen_tcp_thread(void *arg) {
                             printf("envoye a tous is good\n");                            
                         }
 
-                        add_peer(p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
+                        add_peer(&p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
                         p.encheres[p.enchere_active].nb_pairs++;                       
                         printf("nb participants enchere %d\n", p.encheres[p.enchere_active].nb_pairs);
                     }
@@ -430,6 +487,13 @@ void *listen_tcp_thread(void *arg) {
                 printf("MESSAGE 6 RECU\n");
                 uint8_t buffer[BUF_SIZE];
                 ssize_t len = recv(client_sock, buffer, BUF_SIZE, 0);
+                // ssize_t len = SSL_read(ssl, buffer, sizeof(buffer));
+                if (len <= 0) {
+                    // cleanup_ssl_connection(ssl);
+                    close(client_sock);
+                    continue;
+                }
+                buffer[len] = '\0';
                 struct message_6 msg={0};
                 if(parse_msg_6(buffer,sizeof(msg),&msg)<0){
                     printf("erreur message 6 reception\n");
@@ -437,10 +501,13 @@ void *listen_tcp_thread(void *arg) {
                 add_peer(&p.encheres[p.enchere_active].liste_participants,msg.id,msg.ip,msg.port,msg.cle);
                 p.encheres[p.enchere_active].nb_pairs++;
                 printf("info message 6 recu paire ajouté : %d\n", p.encheres[p.enchere_active].nb_pairs);
+                // cleanup_ssl_connection(ssl);
                 close(client_sock);
-
+                continue;
             }
-            close(client_sock);
+                printf("Message inattendu reçu : %u\n", peekbuf[0]);
+                // cleanup_ssl_connection(ssl);
+                close(client_sock);
         }
 
     } 
@@ -470,7 +537,7 @@ int gestion_reception_liaison() {
 
     // Protocole pour rejoindre un système d'enchères
     if (code == 3 && p.nb_encheres > 0) {
-        char msg[1 + 2 + 16 + 2];
+        uint8_t msg[1 + 2 + 16 + 2];
          if (msg_4(msg, p.id_peer, p.port_perso) != 0) {
              fprintf(stderr, "Erreur lors de la construction du message 4.\n");
              return -1;
@@ -515,7 +582,7 @@ int gestion_reception_liaison() {
 }
 
 int gestion_reception_UDP() {
-    char buf[1024];
+    uint8_t buf[1024];
     struct sockaddr_in6 src = {0};
     socklen_t len = sizeof(src);
     ssize_t n = recvfrom(p.socket_udp, buf, sizeof(buf), 0,
@@ -555,11 +622,17 @@ int gestion_reception_UDP() {
 
                 // connexion qui doit rester ouverte, stocker le return de x=connexion_TLS et voir comment gerer ca
                 int socket_P = connexion_TLS(peer_Q->ip, port);
-                if (socket_P < 0){
-                    close(socket_P);
-                    printf("Erreur connexion à Q\n");
-                    return -1;
-                }
+                // SSL *ssl = connexion_TLS(peer_Q->ip, port);
+                // if (ssl == NULL) {
+                //     fprintf(stderr, "Erreur lors de la connexion TLS.\n");
+                //     return -1;
+                // }
+                // int socket_P = SSL_get_fd(ssl);
+                // if (socket_P < 0){
+                //     close(socket_P);
+                //     printf("Erreur connexion à Q\n");
+                //     return -1;
+                // }
 
                 printf("Je suis ds msg_join étape 7\n");
 
@@ -594,6 +667,7 @@ int gestion_reception_UDP() {
                 if (inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, str_ip, sizeof(str_ip)) == NULL) {
                     perror("inet_ntop");
                     close(socket_P);
+                    // cleanup_ssl_connection(ssl);
                     return -1;
                 }
                 printf("Message 7 reçu : ID_Q=%d, IP_enchere=%s, PORT_enchere=%d\n", 
@@ -609,11 +683,14 @@ int gestion_reception_UDP() {
                     memset(&p.encheres[p.enchere_active], 0, sizeof(EnchereSocket));
                     p.enchere_active = enchere_precedente; // Reset active auction
                     send(socket_P, "erreur", 6, 0);
+                    // SSL_write(socket_P, "erreur", 6);
                     close(socket_P);
+                    // cleanup_ssl_connection(ssl);
                     return -1;
                 }
                 //printf("nb de pairs enchere %d\n",p.encheres[p.enchere_active].nb_pairs);
                 close(socket_P);
+                // cleanup_ssl_connection(ssl);
         return 0;
     }
 
@@ -872,6 +949,13 @@ void clean_peer() {
         p.pseudo = NULL;
     }
 
+    // Libérer le certificat 
+    if (p.cert_path) {
+        free(p.cert_path);
+        p.cert_path = NULL;
+    }
+
+    
     // Fermer les sockets personnels
     if (p.socket_tcp >= 0) {
         close(p.socket_tcp);
@@ -921,6 +1005,7 @@ void clean_peer() {
     }
     if (p.ed_privkey) EVP_PKEY_free(p.ed_privkey);
     if (p.ed_pubkey) EVP_PKEY_free(p.ed_pubkey);
+    SSL_CTX_free(p.ctx);
 
     printf("Peer nettoyé proprement.\n");
 }
@@ -946,29 +1031,51 @@ void clean_peer() {
              continue;
          }
 
+        // SSL *ssl = SSL_new(p.ctx);
+        // if (!ssl) {
+        //     fprintf(stderr, "Failed to create SSL object\n");
+        //     close(sock);
+        //     current = current->next;
+        //     continue;
+        // }
+        // SSL_set_fd(ssl, sock);
+        // if (SSL_connect(ssl) <= 0) {
+        //     fprintf(stderr, "Failed to establish SSL connection\n");
+        //     SSL_free(ssl);
+        //     close(sock);
+        //     current = current->next;
+        //     continue;
+        // }
+
+
          // Create and send message 6
          uint8_t msg[1 + 2 + 16 + 2 + 113];  // CODE + ID + IP + PORT + CLE
          int msg_len = msg_6(msg, new_peer_id, new_peer_ip, new_peer_port, new_peer_cle);
          printf("id:%d,port\n",msg[msg_len]);
         
          if (send(sock, msg, msg_len, 0) != msg_len) {
-            fprintf(stderr, "Failed to send message 6 to peer %d\n", current->id);
-             close(sock);
-             current = current->next;
-             continue;
+            // if (SSL_write(ssl, msg, msg_len) != msg_len) {
+                fprintf(stderr, "Failed to send message 6 to peer %d\n", current->id);
+                // cleanup_ssl_connection(ssl);
+                close(sock);
+                current = current->next;
+                continue;
          }
 
         // Read response
          uint8_t response[2];
          int bytes_read = recv(sock, response, 2, 0);
+            // int bytes_read = SSL_read(ssl, response, sizeof(response));
          if (bytes_read == 0) {
             printf("envoye ok msg 6\n");
+            // cleanup_ssl_connection(ssl);
             close(sock);
             current = current->next;
             continue;
          }
 
-         close(sock);
+        // cleanup_ssl_connection(ssl);
+        close(sock);
          current = current->next;
      }
 
