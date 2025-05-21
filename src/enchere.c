@@ -16,6 +16,7 @@
 #include "../include/message.h"
 #include "../include/connexion.h"
 #include "../include/utils.h"
+#include "../include/securite.h"
 
 void afficher_enncheres() {
     printf("Liste des enchères auxquels on participe :\n");
@@ -230,9 +231,10 @@ void creer_enchere()
     inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, ip_str, sizeof(ip_str));
     printf("Enchère initiée : ID=%d, ADR=%s\n", auction_num_id, ip_str);
 
-    is_superviseur = 1;
-    init_auction_supervisor();
     enchere_supervise = auction_num_id;
+    is_superviseur = 1; // Initialiser le nombre de pairs à 1 (le superviseur)
+    init_auction_supervisor();
+
 }
 
 // ----------------------------------------------------------------------------
@@ -286,8 +288,41 @@ void *auction_receiver(void *arg)
             
             // Handle binary messages with codes
             uint8_t code = (uint8_t)buffer[0];
-            
-            if (code == 8 || code == 9 || code == 10 || code == 14 || code == 15) {
+
+            if (code == 10){
+                printf("[ENCHERE] : message 10 recu : debut consensus \n");
+                
+                uint8_t consensus_msg[1024];
+                char *message = "Je valide la vente";
+                unsigned char *signature = NULL;
+                size_t siglen = 0;
+
+                // Signature du message
+                if (!sign(p.ed_privkey, message, &signature, &siglen)) {
+                    fprintf(stderr, "Erreur lors de la signature\n");
+                    return -1;
+                }
+
+                int len = msg_1(consensus_msg, p.id_peer, message, signature, siglen);
+                if (len > 0) {
+                    sendto(p.socket_udp, consensus_msg, sizeof(consensus_msg), 0,
+                           (struct sockaddr *)&src, srclen);   
+                    printf("Message de consensus envoyé : %s\n", message); 
+                } 
+
+            } else if (code == 2 && p.encheres[p.enchere_active].is_superviseur == 0)  {
+                //p.encheres[p.enchere_active].is_superviseur == 0
+                printf("Message 2 reçu : début du consensus\n");
+                struct message_2 parsed_msg = {0};
+                printf("retour:%d",parse_msg_2(buffer, len, &parsed_msg));
+                if (parse_msg_2(buffer, len, &parsed_msg) == 0) {
+                    printf("Message 2 reçu : ID=%d, Message=%s\n NB=%d\n", parsed_msg.id, parsed_msg.mess, parsed_msg.nb_validations);
+                    if (parsed_msg.nb_validations == p.encheres[p.enchere_active].nb_pairs - 1) {
+                        printf("Consensus atteint pour le message 2.\n");
+                        // RECUPERE LES SIGNATURE ET VERIFIER BLABLABLABL
+                    }
+                }
+            } else if (code == 8 || code == 9 || code == 14 || code == 15) {
                 struct message_8 msg;
                 if (parse_msg_8_9_10(buffer, len, &msg) == 0) {
                     handle_auction_message(code, msg.id, msg.numv, msg.prix);
@@ -349,7 +384,7 @@ int init_vente () {
     }
 
     // Send the message to the auction group
-    if (send_msg_enchere(msg, sizeof(msg), p.enchere_active) != 0) {
+    if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
         fprintf(stderr, "Erreur lors de l'envoi du message d'initiation de vente.\n");
         return -1;
     }
@@ -362,7 +397,9 @@ int init_vente () {
 
     printf("Enchère initiée : ID=%d, ADR=%s\n", numv, ip_str);
     is_superviseur = 1;
-    enchere_supervise = numv;
+    enchere_supervise = p.enchere_active;
+    p.encheres[p.enchere_active].numv = numv;
+    p.encheres[enchere_supervise].is_superviseur = 1;
 }
 
 int sur_enchere() {
@@ -406,7 +443,7 @@ void faire_offre(uint32_t prix)
     uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
     msg[0] = 9; // CODE = 9 for bid
     uint16_t peer_id = (uint16_t)p.id_peer;
-    uint32_t numv = p.cpt; // Current auction number
+    uint32_t numv = p.encheres[p.enchere_active].numv; // Current auction number
 
     // Convert to network byte order
     uint16_t id_net = htons(peer_id);
@@ -419,14 +456,14 @@ void faire_offre(uint32_t prix)
     memcpy(&msg[7], &prix_net, 4);
 
     // Send the bid message to the auction group
-    if (send_msg_enchere(msg, sizeof(msg), p.enchere_active) != 0) {
+    if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
         fprintf(stderr, "Erreur lors de l'envoi de l'offre.\n");
         return;
     }
     printf("Offre envoyée : PRIX=%u\n", prix);
 }
 
-int send_msg_enchere(uint8_t *msg, size_t len, int num_enchere)
+int send_msg_enchere(uint8_t *msg, size_t len, int num_enchere, int sock)
 {
     if (p.enchere_active < 0) {
         fprintf(stderr, "Erreur : pas d'enchère active.\n");
@@ -445,7 +482,7 @@ int send_msg_enchere(uint8_t *msg, size_t len, int num_enchere)
         dest.sin6_scope_id = p.global_iface_index;
     }
     dest.sin6_scope_id = p.global_iface_index;
-    ssize_t sent_bytes = sendto(p.encheres[num_enchere].sock, msg, len, 0,
+    ssize_t sent_bytes = sendto(sock, msg, len, 0,
                                  (struct sockaddr *)&dest, sizeof(dest));
 
     if (sent_bytes < 0) {

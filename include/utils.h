@@ -19,6 +19,9 @@ int create_perso_adr_sockets(struct sockaddr_in6 ip, unsigned int scope_id, int 
 // int create_perso_adr_sockets(struct sockaddr_in6 ip, unsigned int scope_id,
 //                              int *tcp_sock, int *udp_sock,
 //                              uint16_t port, char *priv);
+void free_valid_peer_list(struct valid_peer *head);
+void add_valid_peer(struct valid_peer **head, uint16_t id, uint8_t lsig, const unsigned char *sig);
+
 void print_peer_list(peer_list *head);
 int get_adresse_perso_par_index(struct in6_addr *addr, unsigned int iface_index);
 int send_multicast(int sock, char *msg, size_t msg_len);

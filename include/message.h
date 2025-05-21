@@ -172,11 +172,21 @@ struct message_8 {
 // PARTIE CONSENSUS 
 struct message_1 {
     uint8_t code;       // CODE, ici = 1
-    uint16_t id;        // ID du pair (big-endian à sérialiser)
+    uint16_t id;        // ID du pair 
     uint8_t lmess;      // longueur du message MESS
-    char *mess;         // pointeur vers message (non terminé)
+    char mess[256];         // pointeur vers message 
     uint8_t lsig;       // longueur de la signature
-    unsigned char *sig; // pointeur vers signature binaire
+    unsigned char sig[ED25519_SIGNATURE_SIZE]; // pointeur vers signature binaire
+};
+
+struct message_2 {
+    uint8_t code;       // CODE, ici = 1
+    uint16_t id;        // ID du supeviseur 
+    uint8_t lmess;      // longueur du message MESS
+    char mess[256];         // pointeur vers message 
+    uint8_t lsig;       // longueur de la signature du superviseur
+    unsigned char sig[ED25519_SIGNATURE_SIZE]; // pointeur vers signature binaire de superviseur
+    uint16_t nb_validations; // nombre de validations reçues 
 };
 
 //--------------------------------------------------------------------------------------------------
@@ -211,11 +221,13 @@ int parse_msg_8_9_10(uint8_t *msg, size_t msg_len, struct message_8 *msg_struct)
 int parse_msg_11(uint8_t *msg, size_t msg_len, FinalizationWarningMessage *msg_struct);
 int parse_msg_12(uint8_t *msg, size_t msg_len, FinalizationMessage *msg_struct);
 
-int msg_1 (const struct message_1 *msg, unsigned char **buf_out, size_t *buf_len);
+int msg_1(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen);
 int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_out);
-int send_msg_1(EVP_PKEY *privkey, uint16_t id, const char *mess,
-               unsigned char **buf_out, size_t *buf_len);
+// int send_msg_1(EVP_PKEY *privkey, uint16_t id, const char *mess,
+//                unsigned char **buf_out, size_t *buf_len);
 
+int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations);
+int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg);
 
 int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
 

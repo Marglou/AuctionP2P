@@ -278,6 +278,36 @@ int create_perso_adr_sockets(struct sockaddr_in6 ip, unsigned int scope_id,
     return 0;
 } 
 
+// POUR LA STRUCT VALID_PEER
+void free_valid_peer_list(struct valid_peer *head) {
+    struct valid_peer *tmp;
+    while (head != NULL) {
+        tmp = head;
+        head = head->next;
+        free(tmp);
+    }
+}
+
+void add_valid_peer(struct valid_peer **head, uint16_t id, uint8_t lsig, const unsigned char *sig) {
+    struct valid_peer *new_peer = malloc(sizeof(struct valid_peer));
+    if (!new_peer) {
+        perror("Erreur d'allocation mémoire pour valid_peer");
+        return;
+    }
+    new_peer->id = id;
+    new_peer->lsig = lsig;
+    if (sig && lsig > 0 && lsig <= ED25519_SIGNATURE_SIZE) {
+        memcpy(new_peer->sig, sig, lsig);
+    } else {
+        memset(new_peer->sig, 0, ED25519_SIGNATURE_SIZE);
+    }
+    new_peer->next = *head;
+    *head = new_peer;
+}
+
+
+// -------------------------------------------------------------------------------------------------------
+
 /* // Fonction qui crée les deux sockets
 int create_perso_adr_sockets(struct sockaddr_in6 ip, unsigned int scope_id,
                              int *tcp_sock, int *udp_sock,

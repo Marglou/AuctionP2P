@@ -17,8 +17,8 @@
 #include "../include/utils.h"
 
 // Global variables for auction supervision
-extern int is_superviseur;
-extern int enchere_supervise;
+// extern int is_superviseur;
+// extern int enchere_supervise;
 
 // Track current auction state
 uint32_t current_price = 0;
@@ -30,6 +30,8 @@ uint16_t current_bidder = 0;
 #define FINALIZATION_TIMEOUT 30  // 30 seconds after warning before finalization
 time_t last_bid_time = 0;
 int warning_sent = 0;
+
+
 
 void init_auction_supervisor() {
     is_superviseur = 1;
@@ -63,7 +65,7 @@ void check_auction_timeout() {
     if (!warning_sent && elapsed >= INACTIVITY_TIMEOUT) {
         uint8_t warning_msg[11];
         if (msg_11(warning_msg, p.id_peer, current_numv, current_price) == 11) {
-            send_msg_enchere(warning_msg, 11, p.enchere_active);
+            send_msg_enchere(warning_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
             printf("[Superviseur] Envoi de l'avertissement de finalisation\n");
             warning_sent = 1;
         }
@@ -72,7 +74,7 @@ void check_auction_timeout() {
     else if (warning_sent && elapsed >= (INACTIVITY_TIMEOUT + FINALIZATION_TIMEOUT)) {
         uint8_t final_msg[11];
         if (msg_12(final_msg, current_bidder, current_numv, current_price) == 11) {
-            send_msg_enchere(final_msg, 11, p.enchere_active);
+            send_msg_enchere(final_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
             printf("[Superviseur] Finalisation de l'enchère - Gagnant: pair %u, Prix: %u\n", 
                    current_bidder, current_price);
             
@@ -88,11 +90,12 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
     }
 
     // Check if this is a competing bid
-    if (numv != current_numv) {
+
+    if (numv != p.encheres[enchere_supervise].numv) {
         // Reject competing bid (code 14)
         uint8_t reject_msg[11];
         if (msg_14_15(reject_msg, 14, bidder_id, numv, prix) == 11) {
-            send_msg_enchere(reject_msg, 11, p.enchere_active);
+            send_msg_enchere(reject_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
             printf("[Superviseur] Rejet de l'offre concurrente de pair %u\n", bidder_id);
         }
         return -1;
@@ -103,7 +106,7 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
         // Reject low bid (code 15)
         uint8_t reject_msg[11];
         if (msg_14_15(reject_msg, 15, bidder_id, numv, prix) == 11) {
-            send_msg_enchere(reject_msg, 11, p.enchere_active);
+            send_msg_enchere(reject_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
             printf("[Superviseur] Rejet de l'offre trop basse de pair %u\n", bidder_id);
         }
         return -1;
@@ -112,13 +115,20 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
     // Valid bid - relay with code 10
     uint8_t relay_msg[11];
     if (msg_8_9_10(relay_msg, 10, bidder_id, numv, prix) == 11) {
-        send_msg_enchere(relay_msg, 11, p.enchere_active);
+        send_msg_enchere(relay_msg, 11, p.enchere_active, p.socket_udp);
+
         printf("[Superviseur] Validation de l'offre de pair %u\n", bidder_id);
+
+        // pthread_t thr_consensus;
+        // // Create a thread to handle consensus
+        // if (pthread_create(&thr_consensus, NULL, handle_consensus, NULL) != 0) {
+        //     fprintf(stderr, "Erreur lors de la création du thread de consensus.\n");
+        //     return -1;
+        // }
         
         // Update current auction state
         current_price = prix;
         current_bidder = bidder_id;
-        
         // Reset the auction timer
         reset_auction_timer();
         
@@ -134,16 +144,18 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
             printf("[Enchère] Nouvelle enchère initiée par pair %u: NUMV=%u, PRIX=%u\n", 
                    id, numv, prix);
             
-            // Update auction state
-            current_price = prix;
-            current_numv = numv;
-            current_bidder = id;
+            // // Update auction state
+            // current_price = prix;
+            // current_numv = numv;
+            // current_bidder = id;
             
-            // Store auction info
+            // // Store auction info
             p.encheres[p.enchere_active].numv = numv;
+            // enchere_supervise = p.enchere_active;
+            // is_superviseur = 1;
             
-            // Initialize timer
-            reset_auction_timer();
+            // // Initialize timer
+            // reset_auction_timer();
             break;
             
         case 9: // Bid message
@@ -156,14 +168,20 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
             }
             break;
             
-        case 10: // Relayed bid message
-            printf("[Enchère] Offre validée de pair %u: NUMV=%u, PRIX=%u\n", 
-                   id, numv, prix);
+        // case 10: // Relayed bid message
+            // printf("[Enchère] Offre validée de pair %u: NUMV=%u, PRIX=%u\n", 
+            //        id, numv, prix);
             
-            // Update current auction state
-            current_price = prix;
-            current_bidder = id;
-            break;
+            // // Update current auction state
+            // current_price = prix;
+            // // current_bidder = id;
+            // printf("[ENCHERE] : message 10 recu : debut consensus \n");
+            // uint8_t consensus_msg[11];
+            // if (msg_1(consensus_msg, id, "Consensus") == 11) {
+            //     send_msg_enchere(consensus_msg, 11, p.enchere_active);
+            //     printf("[Superviseur] Envoi du message de consensus à pair %u\n", id);
+            // }
+            // break;
             
         case 14: // Rejected bid (competing)
             printf("[Enchère] Offre rejetée (concurrente) de pair %u: NUMV=%u, PRIX=%u\n", 
@@ -186,3 +204,5 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
     }
 }
 
+
+//-------------------------------------  CONSENSUS -------------------------------------

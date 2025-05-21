@@ -239,7 +239,6 @@ void peer_start(const char *nom) {
 
     printf("Abonné au groupe multicast %s sur l'interface %d\n", GROUP, p.global_iface_index);
 
-
     // Gestion du signal
     signal(SIGINT, handle_sigint);
 
@@ -585,6 +584,9 @@ int gestion_reception_UDP() {
     uint8_t buf[1024];
     struct sockaddr_in6 src = {0};
     socklen_t len = sizeof(src);
+
+    int nb_msg_1 = 0;
+    struct valid_peer *head = NULL;
     ssize_t n = recvfrom(p.socket_udp, buf, sizeof(buf), 0,
                          (struct sockaddr*)&src, &len);
     if (n < 0) {
@@ -700,10 +702,82 @@ int gestion_reception_UDP() {
         }
     } else if (buf[0] == 1) {
         printf("verif du msg 1 consensus\n");
+        struct message_1 parsed_msg = {0};
+        int msg_len = sizeof(parsed_msg);
+        int erreur = parse_msg_1(buf, msg_len, &parsed_msg);
+        printf("erreur %d\n", erreur);
+        if (erreur == 0) {
+            printf("Message 1 reçu : ID=%u, MESS=%s \n", parsed_msg.id, parsed_msg.mess);
+
+            // FAIRE LA VERIF JE SAIS PAS COMMENT 
+            // get_peer_pubkey(parsed_msg.id);
+            // if (verify(p.ed_pubkey, (unsigned char *)parsed_msg.mess, parsed_msg.sig, sizeof(parsed_msg.sig)) == 1) {
+            //     printf("Message 1 vérifié avec succès.\n");
+            //     nb_msg_1++;
+            // } else {
+            //     printf("Échec de la vérification du message 1.\n");
+            // }
+            add_valid_peer(&head, parsed_msg.id, parsed_msg.lsig, parsed_msg.sig);
+            nb_msg_1++;
+        }
+
+        if (nb_msg_1 == p.encheres[enchere_supervise].nb_pairs-1) {
+            printf("Consensus atteint pour le message 1.\n");
+            // ENVOIE MSG 2
+            if (nb_msg_1 <= 3) {
+                uint8_t msg[BUF_SIZE];
+                unsigned char *signature = NULL;
+                size_t siglen = 0;
+
+                // Signature du message
+                if (!sign(p.ed_privkey, parsed_msg.mess, &signature, &siglen)) {
+                    fprintf(stderr, "Erreur lors de la signature\n");
+                    return -1;
+                }
+
+                int msg2_len = msg_2(msg, p.id_peer, parsed_msg.mess, signature, siglen, nb_msg_1);
+                if (msg2_len < 0) {
+                    fprintf(stderr, "Erreur lors de la construction du message 2.\n");
+                    free(signature);
+                    return -1;
+                }
+                printf("\nMESSAGE 2 partie 1 OK\n");
+                size_t offset = msg2_len;
+
+                // Parcours de la liste valid_peer et concaténation dans le buffer
+                struct valid_peer *cur = head;
+                while (cur) {
+                    // Ajout de l'id (2 octets)
+                    uint16_t id_net = htons(cur->id);
+                    memcpy(msg + offset, &id_net, sizeof(uint16_t));
+                    offset += sizeof(uint16_t);
+
+                    // Ajout de la longueur de la signature (1 octet)
+                    msg[offset++] = cur->lsig;
+
+                    // Ajout de la signature (lsig octets)
+                    memcpy(msg + offset, cur->sig, cur->lsig);
+                    offset += cur->lsig;
+
+                    cur = cur->next;
+                }
+                printf("MESSAGE 2 partie 2 OK\n");
+                free_valid_peer_list(head);
+
+                if (send_msg_enchere(msg, offset, p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
+                    perror("sendto dans gestion reception UDP MSG 2");
+                    return -1;
+                } else {
+                    printf("Message 2 envoyé à l'enchère active.\n");
+                }
+            }
+
+
+        }
+        return 0;
     }
     printf("[Unicast UDP] %s\n", buf);
     fflush(stdout);
-
     return 0;
 }
 
@@ -920,7 +994,7 @@ void* listen_main_sockets(void* arg) {
                     snprintf(message, sizeof(message), "[%s] %s", p.pseudo, input);
 
                     if (p.enchere_active >= 0) {
-                        if (send_msg_enchere(message, strlen(message), p.enchere_active) < 0) {
+                        if (send_msg_enchere(message, strlen(message), p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
                             fprintf(stderr, "Erreur lors de l'envoi du message d'enchère\n");
                         }
                     } else {
@@ -1013,7 +1087,7 @@ void clean_peer() {
 
 
 // Function to connect to all other peers and send message 6
- int connect_to_peers_and_send_info(peer_list *h, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
+int connect_to_peers_and_send_info(peer_list *h, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
                                   uint16_t new_peer_port, unsigned char *new_peer_cle) {
      int ret = 0;
     peer_list *current = h->next;
@@ -1078,7 +1152,6 @@ void clean_peer() {
         close(sock);
          current = current->next;
      }
-
      return ret;
 }
 

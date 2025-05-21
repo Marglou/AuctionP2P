@@ -260,122 +260,179 @@ int parse_msg_8_9_10(uint8_t *msg, size_t msg_len, struct message_8 *msg_struct)
 }
 
 // ---------------  CODE 1 ------------------------------------------------
-// Renvoie la taille totale du message  (ou -1 en erreur)
-int msg_1 (const struct message_1 *msg, unsigned char **buf_out, size_t *buf_len) {
-    if (!msg || !buf_out || !buf_len) return -1;
+// Renvoie la taille totale du message écrit dans msg, ou -1 en cas d'erreur
+int msg_1(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen) {
+    uint8_t codemsg = 1;
+    uint8_t lmess = (uint8_t)strlen(mess);
 
-    // Taille totale = 1 + 2 + 1 + lmess + 1 + lsig
-    *buf_len = 1 + 2 + 1 + msg->lmess + 1 + msg->lsig;
-    *buf_out = malloc(*buf_len);
-    if (!*buf_out) return -1;
+    if (lmess > 255 || siglen > 255) return -1;  // sécurité
 
-    unsigned char *p = *buf_out;
+    uint16_t net_id = htons(id); // 2 octets en réseau
 
-    // CODE
-    *p++ = msg->code;
+    size_t offset = 0;
 
-    // ID (2 octets big-endian)
-    uint16_t id_be = htons(msg->id);
-    memcpy(p, &id_be, 2);
-    p += 2;
+    msg[offset++] = codemsg;
 
-    // LMESS
-    *p++ = msg->lmess;
+    memcpy(msg + offset, &net_id, sizeof(net_id));
+    offset += sizeof(net_id);
 
-    // MESS (lmess bytes)
-    memcpy(p, msg->mess, msg->lmess);
-    p += msg->lmess;
+    msg[offset++] = lmess;
 
-    // LSIG
-    *p++ = msg->lsig;
+    memcpy(msg + offset, mess, lmess);
+    offset += lmess;
 
-    // SIG (lsig bytes)
+    msg[offset++] = siglen;
+
+    if (siglen > 0) {
+        memcpy(msg + offset, sig, siglen);
+        offset += siglen;
+    }
+
+    return (int)offset;  // longueur totale du message
+}
+
+int parse_msg_1(const uint8_t *buf, size_t len, struct message_1 *msg) {
+
+    if (len < 3) return -1; // Minimum : CODE + ID(2) + LMESS + LSIG
+
+    size_t offset = 0;
+
+    uint8_t code = buf[offset++];
+    if (code != 1) return -2;
+
+    msg->id = ntohs(*(uint16_t *)(buf + offset));
+    offset += 2;
+
+    msg->lmess = buf[offset++];
+    if (msg->lmess > 255 || offset + msg->lmess + 1 > len)
+        return -3;
+
+    memcpy(msg->mess, buf + offset, msg->lmess);
+    msg->mess[msg->lmess] = '\0';
+    offset += msg->lmess;
+
+    // printf("DEBUG: lsig=%u, offset=%zu, len=%zu\n", msg->lsig, offset, len);
+    msg->lsig = buf[offset++];
+    if (msg->lsig > ED25519_SIGNATURE_SIZE || offset + msg->lsig > len)
+        return -4;
+
     if (msg->lsig > 0)
-        memcpy(p, msg->sig, msg->lsig);
+        memcpy(msg->sig, buf + offset, msg->lsig);
 
     return 0;
 }
 
-int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_out) {
-    if (!buf || !msg_out || buflen < 6) // minimum taille (CODE+ID+LMESS+LSIG = 1+2+1+1)
-        return -1;
 
-    const unsigned char *p = buf;
+// ---------------------------------- CODE 2   -------------------------------------------
+// int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations) {
+//     uint8_t codemsg = 1;
+//     uint8_t lmess = (uint8_t)strlen(mess);
 
-    msg_out->code = *p++;
-    if (msg_out->code != 1)
-        return -1;
+//     if (lmess > 255 || siglen > 255) return -1;  // sécurité
 
-    uint16_t id_be;
-    memcpy(&id_be, p, 2);
-    p += 2;
-    msg_out->id = ntohs(id_be);
+//     uint16_t net_id = htons(id); // 2 octets en réseau
 
-    msg_out->lmess = *p++;
-    if (buflen < 1 + 2 + 1 + msg_out->lmess + 1)
-        return -1;
+//     size_t offset = 0;
 
-    msg_out->mess = malloc(msg_out->lmess);
-    if (!msg_out->mess) return -1;
-    memcpy(msg_out->mess, p, msg_out->lmess);
-    p += msg_out->lmess;
+//     msg[offset++] = codemsg;
 
-    msg_out->lsig = *p++;
+//     memcpy(msg + offset, &net_id, sizeof(net_id));
+//     offset += sizeof(net_id);
 
-    size_t sig_expected_len = msg_out->lsig;
-    if (buflen < 1 + 2 + 1 + msg_out->lmess + 1 + sig_expected_len) {
-        free(msg_out->mess);
-        return -1;
+//     msg[offset++] = lmess;
+
+//     memcpy(msg + offset, mess, lmess);
+//     offset += lmess;
+
+//     msg[offset++] = siglen;
+
+//     if (siglen > 0) {
+//         memcpy(msg + offset, sig, siglen);
+//         offset += siglen;
+//     }
+
+//     // Ajout du nombre de validations sur 2 octets
+//     uint16_t net_nb_validations = htons(nb_validations);
+//     memcpy(msg + offset, &net_nb_validations, sizeof(net_nb_validations));
+//     offset += sizeof(net_nb_validations);
+
+//     return 0;  
+// }
+int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations) {
+    uint8_t codemsg = 2;
+    uint8_t lmess = (uint8_t)strlen(mess);
+
+    if (lmess > 255 || siglen > 255) return -1;  // sécurité
+
+    uint16_t net_id = htons(id); // 2 octets en réseau
+
+    size_t offset = 0;
+
+    msg[offset++] = codemsg;
+
+    memcpy(msg + offset, &net_id, sizeof(net_id));
+    offset += sizeof(net_id);
+
+    msg[offset++] = lmess;
+
+    memcpy(msg + offset, mess, lmess);
+    offset += lmess;
+
+    msg[offset++] = siglen;
+
+    if (siglen > 0) {
+        memcpy(msg + offset, sig, siglen);
+        offset += siglen;
     }
 
-    if (sig_expected_len > 0) {
-        msg_out->sig = malloc(sig_expected_len);
-        if (!msg_out->sig) {
-            free(msg_out->mess);
-            return -1;
-        }
-        memcpy(msg_out->sig, p, sig_expected_len);
-    } else {
-        msg_out->sig = NULL;
-    }
+    // Ajout du nombre de validations sur 2 octets
+    uint16_t net_nb_validations = htons(nb_validations);
+    memcpy(msg + offset, &net_nb_validations, sizeof(net_nb_validations));
+    offset += sizeof(net_nb_validations);
+
+    return (int)offset;  // retourne la taille totale du message
+}
+
+int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg) {
+
+    if (len < 3) return -1; // Minimum : CODE + ID(2) + LMESS + LSIG
+
+    size_t offset = 0;
+
+    uint8_t code = buf[offset++];
+    if (code != 2) return -2;
+
+    msg->id = ntohs(*(uint16_t *)(buf + offset));
+    offset += 2;
+
+    msg->lmess = buf[offset++];
+    if (msg->lmess > 255 || offset + msg->lmess + 1 > len)
+        return -3;
+
+    memcpy(msg->mess, buf + offset, msg->lmess);
+    msg->mess[msg->lmess] = '\0';
+    offset += msg->lmess;
+
+    // printf("DEBUG: lsig=%u, offset=%zu, len=%zu\n", msg->lsig, offset, len);
+    msg->lsig = buf[offset++];
+    if (msg->lsig > ED25519_SIGNATURE_SIZE || offset + msg->lsig > len)
+        return -4;
+
+    if (msg->lsig > 0)
+        memcpy(msg->sig, buf + offset, msg->lsig);
+    offset += msg->lsig;
+
+    // Ajout du nombre de validations sur 2 octets
+    // if (offset + sizeof(uint16_t) > len)
+    //     return -5;
+    msg->nb_validations = ntohs(*(uint16_t *)(buf + offset));
+    offset += sizeof(uint16_t);
 
     return 0;
 }
 
-int send_msg_1(EVP_PKEY *privkey, uint16_t id, const char *mess,
-               unsigned char **buf_out, size_t *buf_len)
-{
-    if (!privkey || !mess || !buf_out || !buf_len) return -1;
 
-    struct message_1 msg;
-    msg.code = 1;
-    msg.id = id;
-    msg.lmess = strlen(mess);
-    msg.mess = (unsigned char *)mess;
-
-    unsigned char *signature = NULL;
-    size_t siglen = 0;
-
-    // Signature du message
-    if (!sign(privkey, msg.mess, &signature, &siglen)) {
-        fprintf(stderr, "Erreur lors de la signature\n");
-        return -1;
-    }
-
-    msg.lsig = siglen;
-    msg.sig = signature;
-
-    // Encodage du message dans un buffer
-    int res = msg_1(&msg, buf_out, buf_len);
-
-    // Libération de la signature temporaire
-    free(signature);
-
-    return res; // 0 si OK, -1 sinon
-}
-
-
-// ------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------
 
 
 

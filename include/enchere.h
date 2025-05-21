@@ -15,6 +15,6 @@ int msg_join_enchere();
 int init_vente ();
 int sur_enchere();
 
-int send_msg_enchere(uint8_t *msg, size_t len, int num_enchere);
+int send_msg_enchere(uint8_t *msg, size_t len, int num_enchere, int sock);
 
 #endif // ENCHERE_H

@@ -14,6 +14,10 @@
 #define MAX_ENCHERES 5
 #define MAX_PEERS 5
 
+#ifndef ED25519_SIGNATURE_SIZE
+#define ED25519_SIGNATURE_SIZE 64
+#endif
+
 // Structure for the peer list
 typedef struct peer_list {
     uint16_t id;
@@ -48,6 +52,7 @@ typedef struct {
     int nb_pairs; // Nombre de pairs dans l'enchère
     int numv; // Numéro de la vente
     struct peer_list *liste_participants; // Liste des pairs de cette enchère
+    int is_superviseur; // Indique si le pair est superviseur de l'enchère
 } EnchereSocket;
 
 
@@ -89,6 +94,12 @@ typedef struct {
     EVP_PKEY *pubkey;
 } peer_key;
 
+struct valid_peer {
+    uint16_t id;
+    uint8_t lsig;
+    unsigned char sig[ED25519_SIGNATURE_SIZE];
+    struct valid_peer *next;
+};
 
 extern int is_superviseur;
 extern int enchere_supervise;
