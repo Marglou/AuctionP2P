@@ -405,6 +405,22 @@ int send_UDP (int sock, struct sockaddr_in6 *multicast_addr, char *msg, size_t m
         perror("sendto multicast");
         return -1;
     }
+
+    // Track messages that require responses (codes 1 and 5)
+    uint8_t code = (uint8_t)msg[0];
+    if (code == 1 || code == 5) {
+        // Extract peer ID from the message
+        uint16_t peer_id = 0;
+        if (code == 5) {
+            peer_id = (msg[1] << 8) | msg[2];
+        }
+        
+        // Track the message for response
+        if (track_udp_message(&p.udp_responses, code, peer_id, msg, msg_len) != 0) {
+            fprintf(stderr, "Warning: Failed to track UDP message for response\n");
+        }
+    }
+
     return 0; // Succès
 }
 
@@ -416,5 +432,21 @@ int send_multicast (int sock, char *msg, size_t msg_len) {
         perror("sendto multicast");
         return -1;
     }
+
+    // Track messages that require responses (codes 1 and 5)
+    uint8_t code = (uint8_t)msg[0];
+    if (code == 1 || code == 5) {
+        // Extract peer ID from the message
+        uint16_t peer_id = 0;
+        if (code == 5) {
+            peer_id = (msg[1] << 8) | msg[2];
+        }
+        
+        // Track the message for response
+        if (track_udp_message(&p.udp_responses, code, peer_id, msg, msg_len) != 0) {
+            fprintf(stderr, "Warning: Failed to track UDP message for response\n");
+        }
+    }
+
     return 0; // Succès
 }

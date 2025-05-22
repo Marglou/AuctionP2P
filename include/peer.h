@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <openssl/evp.h>
 #include <stdbool.h>
+#include "udp_response.h"
 
 #define PORT 12365
 #define GROUP "ff12::abcd"
@@ -92,6 +93,9 @@ typedef struct {
     int cpt;
     struct Multicast adr_liaison;
     int join_en_cours; // Indique si le pair est en cours de jointure
+    
+    // UDP response handling
+    struct udp_response_manager udp_responses;
 } Peer;
 
 typedef struct {

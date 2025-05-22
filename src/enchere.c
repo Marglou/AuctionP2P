@@ -419,6 +419,11 @@ void *auction_receiver(void *arg)
                 int len_msg = msg_1(consensus_msg, p.id_peer, message, signature, siglen);
                 if (len_msg > 0)
                 {
+                    // Track the UDP message before sending
+                    if (track_udp_message(&p.udp_responses, 1, p.id_peer, consensus_msg, len_msg) != 0) {
+                        fprintf(stderr, "Failed to track UDP message 1\n");
+                    }
+                    
                     sendto(p.socket_udp, consensus_msg, len_msg, 0,
                            (struct sockaddr *)&src, srclen);
                     printf("Message de consensus envoyé : %s\n", message);
@@ -730,7 +735,7 @@ int clean_encheres(int id_enchere) {
                     p.encheres[j] = p.encheres[j + 1];
                 }
 
-                p.nb_encheres--; // Décrémenter le nombre d’enchères
+                p.nb_encheres--; // Décrémenter le nombre d'enchères
                 return 0; // Succès
             }
 

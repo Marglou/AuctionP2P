@@ -24,6 +24,7 @@
 #include "../include/connexion.h"
 #include "../include/utils.h"
 #include "../include/securite.h"
+#include "../include/udp_response.h"
 
 
 //info superviseur 
@@ -277,6 +278,9 @@ void peer_start(const char *nom) {
         exit(EXIT_FAILURE);
     }
 
+    // Initialize UDP response manager
+    init_udp_response_manager(&p.udp_responses);  
+
     // Attendre la fin des threads
     pthread_join(p.thread_tcp, NULL);
     pthread_join(p.thread_global, NULL);
@@ -382,7 +386,6 @@ void *listen_tcp_thread(void *arg) {
                         state->response_received = true;
                         state->first_response_time = time(NULL);
                         
-                        // Vérifier si l'ID existe déjà
                         bool id_exists = false;
                         int count=0;
                         int position_enr=0;
@@ -615,8 +618,7 @@ int gestion_reception_UDP() {
     // Gestion des messages avec code
     if (buf[0] == 4 && p.num_peers >= 0 && p.join_en_cours == 0) {
         struct message_4 parsed_msg;
-        if (parse_msg_4(buf, len, &parsed_msg) == 0)
-        {
+        if (parse_msg_4(buf, len, &parsed_msg) == 0) {
             p.discovered_peers[p.num_peers++] = (struct peer_info){
                 .id = parsed_msg.id,
                 .ip = parsed_msg.ip,
@@ -727,14 +729,9 @@ int gestion_reception_UDP() {
         if (erreur == 0) {
             printf("Message 1 reçu : ID=%u, MESS=%s \n", parsed_msg.id, parsed_msg.mess);
 
-            // FAIRE LA VERIF JE SAIS PAS COMMENT 
-            // get_peer_pubkey(parsed_msg.id);
-            // if (verify(p.ed_pubkey, (unsigned char *)parsed_msg.mess, parsed_msg.sig, sizeof(parsed_msg.sig)) == 1) {
-            //     printf("Message 1 vérifié avec succès.\n");
-            //     nb_msg_1++;
-            // } else {
-            //     printf("Échec de la vérification du message 1.\n");
-            // }
+            // Mark response as received for message 1
+            printf("[UDP Response] Marking response received for message 1\n");
+            mark_response_received(&p.udp_responses, 1, parsed_msg.id);
             add_valid_peer(&head, parsed_msg.id, parsed_msg.lsig, parsed_msg.sig);
             nb_msg_1++;
         }
@@ -799,9 +796,13 @@ int gestion_reception_UDP() {
 
         }
         return 0;
-    }
+    } 
     printf("[Unicast UDP] %s\n", buf);
     fflush(stdout);
+    
+    // Check and retry any pending messages (only code 1)
+    printf("[UDP Response] Checking for messages that need retrying...\n");
+    check_and_retry_messages(&p.udp_responses);
     return 0;
 }
 
@@ -1064,7 +1065,7 @@ int supp_peer_list(peer_list **h, int id) {
             } else {
                 // Suppression au milieu ou à la fin
                 prev->next = curr->next;
-                printf("Suppression d’un pair interne : ID=%d\n", id);
+                printf("Suppression d'un pair interne : ID=%d\n", id);
             }
             free(curr);
             return 0;
@@ -1122,7 +1123,7 @@ void clean_peer() {
         p.socket_udp = -1;
     }
 
-    // Quitter le groupe multicast d’une enchère si nécessaire
+    // Quitter le groupe multicast d'une enchère si nécessaire
     if (p.adr_liaison.sock >= 0) {
         // Se désabonner du groupe multicast
         setsockopt(p.adr_liaison.sock, IPPROTO_IPV6, IPV6_LEAVE_GROUP,
@@ -1146,6 +1147,9 @@ void clean_peer() {
         free(p.cert_path);
         p.cert_path = NULL;
     }
+
+    // Clean up UDP response manager
+    cleanup_udp_response_manager(&p.udp_responses);
 
     printf("Peer nettoyé proprement.\n");
 }
