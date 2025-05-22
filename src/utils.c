@@ -186,6 +186,9 @@ int generate_random_port() {
 }
 
 void free_peer_list(peer_list *head) {
+    if (head == NULL) {
+        return;
+    }
     peer_list *current = head;
     peer_list *temp;
 

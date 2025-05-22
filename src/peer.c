@@ -30,12 +30,15 @@
 int is_superviseur=0;
 int enchere_supervise=0;
 Peer p = {0}; // Structure pour stocker les informations du pair
+volatile sig_atomic_t already_cleaned = 0;
+volatile sig_atomic_t stop_threads = 0; // Variable pour arrêter les threads proprement
 
-
-// Gestion de la déconnexion propre avec Ctrl+C
+// // Gestion de la déconnexion propre avec Ctrl+C
 void handle_sigint(int sig) {
     // utiliser sig pour enlever les warnings
     (void)sig;
+    stop_threads = 1; // Indiquer aux threads de s'arrêter
+    already_cleaned = 1; // Indiquer que le nettoyage a déjà été effectué
     char leave_msg[BUF_SIZE];
     snprintf(leave_msg, sizeof(leave_msg), "[LEAVE] %s a quitté le groupe.\n", p.pseudo);
 
@@ -50,6 +53,7 @@ void handle_sigint(int sig) {
     clean_peer();
     exit(0);
 }
+
 
 
 void peer_start(const char *nom) {
@@ -242,6 +246,7 @@ void peer_start(const char *nom) {
     // Gestion du signal
     signal(SIGINT, handle_sigint);
 
+
 // --------------------------------------------------------------------------------
     // Message de JOIN
     char join_msg[BUF_SIZE];
@@ -259,16 +264,22 @@ void peer_start(const char *nom) {
     p.listener_tcp.response_received = 0;
     p.listener_tcp.first_response_time = 0;
 
-    pthread_t tcp_thread;
-    pthread_create(&tcp_thread, NULL, listen_tcp_thread, &p.listener_tcp);
+ 
+    if (pthread_create(&p.thread_tcp, NULL, listen_tcp_thread, &p.listener_tcp) != 0) {
+        perror("Erreur lors de la création du thread TCP");
+        clean_peer();
+        exit(EXIT_FAILURE);
+    }
 
-    // gestion_socket();
-    pthread_t t_principal;
-    pthread_create(&t_principal, NULL, listen_main_sockets, NULL);
+    if (pthread_create(&p.thread_global, NULL, listen_main_sockets, NULL) != 0) {
+        perror("Erreur lors de la création du thread principal");
+        clean_peer();
+        exit(EXIT_FAILURE);
+    }
 
     // Attendre la fin des threads
-    pthread_join(tcp_thread, NULL);
-    pthread_join(t_principal, NULL);
+    pthread_join(p.thread_tcp, NULL);
+    pthread_join(p.thread_global, NULL);
     clean_peer();
     exit(EXIT_SUCCESS);
 }
@@ -1029,45 +1040,10 @@ void* listen_main_sockets(void* arg) {
 // -------------------  ------------------------------------------
 
 void clean_peer() {
-    // Libérer le p.pseudo
-    if (p.pseudo) {
-        free(p.pseudo);
-        p.pseudo = NULL;
-    }
 
-    // Libérer le certificat 
-    if (p.cert_path) {
-        free(p.cert_path);
-        p.cert_path = NULL;
+    if (already_cleaned) {
+        return;
     }
-
-    
-    // Fermer les sockets personnels
-    if (p.socket_tcp >= 0) {
-        close(p.socket_tcp);
-        p.socket_tcp = -1;
-    }
-
-    if (p.socket_udp >= 0) {
-        close(p.socket_udp);
-        p.socket_udp = -1;
-    }
-
-    // Fermer la socket globale (multicast de découverte)
-    if (p.adr_liaison.sock >= 0) {
-        close(p.adr_liaison.sock);
-        p.adr_liaison.sock = -1;
-    }
-
-    // Quitter le groupe multicast d’une enchère si nécessaire
-    if (p.adr_liaison.sock >= 0) {
-        // Se désabonner du groupe multicast
-        setsockopt(p.adr_liaison.sock, IPPROTO_IPV6, IPV6_LEAVE_GROUP,
-                   &p.adr_liaison.mreq, sizeof(p.adr_liaison.mreq));
-        close(p.adr_liaison.sock);
-        p.adr_liaison.sock = -1;
-    }
-
     // Quitter toutes les enchères (groupes multicast) et fermer les sockets
     for (int i = 0; i < p.nb_encheres; i++) {
         if (p.encheres[i].sock >= 0) {
@@ -1081,18 +1057,55 @@ void clean_peer() {
                 perror("setsockopt IPV6_LEAVE_GROUP");
             }
 
-            close(p.encheres[i].sock);
-            p.encheres[i].sock = -1;
-
             // Libération de la liste des participants si allouée dynamiquement
             free_peer_list(p.encheres[i].liste_participants);  // à implémenter si nécessaire
             p.encheres[i].liste_participants = NULL;
             pthread_join(p.encheres[i].thread_id, NULL); 
+            close(p.encheres[i].sock);
+            p.encheres[i].sock = -1;
         }
     }
+
+    pthread_cancel(p.thread_tcp);
+    pthread_cancel(p.thread_global);
+
+    pthread_join(p.thread_tcp, NULL);
+    pthread_join(p.thread_global, NULL);
+        // Fermer les sockets personnels
+    if (p.socket_tcp >= 0) {
+        close(p.socket_tcp);
+        p.socket_tcp = -1;
+    }
+
+    if (p.socket_udp >= 0) {
+        close(p.socket_udp);
+        p.socket_udp = -1;
+    }
+
+    // Quitter le groupe multicast d’une enchère si nécessaire
+    if (p.adr_liaison.sock >= 0) {
+        // Se désabonner du groupe multicast
+        setsockopt(p.adr_liaison.sock, IPPROTO_IPV6, IPV6_LEAVE_GROUP,
+                   &p.adr_liaison.mreq, sizeof(p.adr_liaison.mreq));
+        close(p.adr_liaison.sock);
+        p.adr_liaison.sock = -1;
+    }
+
     if (p.ed_privkey) EVP_PKEY_free(p.ed_privkey);
     if (p.ed_pubkey) EVP_PKEY_free(p.ed_pubkey);
     SSL_CTX_free(p.ctx);
+    
+    // Libérer le p.pseudo
+    if (p.pseudo) {
+        free(p.pseudo);
+        p.pseudo = NULL;
+    }
+
+    // Libérer le certificat 
+    if (p.cert_path) {
+        free(p.cert_path);
+        p.cert_path = NULL;
+    }
 
     printf("Peer nettoyé proprement.\n");
 }

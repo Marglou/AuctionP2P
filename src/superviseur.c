@@ -70,7 +70,7 @@ void check_auction_timeout() {
     // If warning was sent and final timeout reached, finalize auction
     // else if (warning_sent && elapsed >= (INACTIVITY_TIMEOUT + FINALIZATION_TIMEOUT)) {
     else if (warning_sent) {
-        uint8_t final_msg[11];
+        uint8_t final_msg[12];
         if (msg_12(final_msg, current_bidder, current_numv, current_price) == 11) {
             send_msg_enchere(final_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
             printf("[Superviseur] Finalisation de l'enchère - Gagnant: pair %u, Prix: %u\n", 
@@ -95,7 +95,6 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
     }
 
     // Check if this is a competing bid
-
     if (numv != p.encheres[enchere_supervise].numv) {
         // Reject competing bid (code 14)
         uint8_t reject_msg[11];
@@ -194,8 +193,10 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
             break;
             
         case 12: // Finalization message
-            printf("[Enchère] Enchère finalisée - Gagnant: pair %u, Prix: %u\n", 
+            printf("[Enchère] Enchère finalisée code 12 - Gagnant: pair %u, Prix: %u\n", 
                    id, prix);
+            // p.encheres[p.enchere_active].is_superviseur = 0;
+            p.encheres[p.enchere_active].numv = 0;
             break;
     }
 }

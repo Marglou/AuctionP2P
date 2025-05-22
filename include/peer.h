@@ -78,6 +78,8 @@ typedef struct {
     int global_iface_index;
     int socket_tcp;
     int socket_udp;
+    pthread_t thread_tcp;
+    pthread_t thread_global;
 
     struct tcp_listener_state listener_tcp;
     struct peer_info discovered_peers[MAX_PEERS];
@@ -107,7 +109,7 @@ extern int is_superviseur;
 extern int enchere_supervise;
 // extern struct Multicast adr_liaison; // Structure pour le multicast
 extern Peer p;
-
+extern volatile int stop_threads;
 // Fonctions principales
 void peer_start(const char *nom);
 

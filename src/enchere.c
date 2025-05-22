@@ -354,6 +354,9 @@ int msg_join_enchere()
 // Thread pour recevoir les messages du groupe d'enchères
 void *auction_receiver(void *arg)
 {
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+
     int sock = *(int *)arg;
     free(arg); // Libère la mémoire allouée dynamiquement
 
@@ -361,7 +364,7 @@ void *auction_receiver(void *arg)
     struct sockaddr_in6 src;
     socklen_t srclen = sizeof(src);
 
-    while (1)
+    while (stop_threads == 0)
     {
         memset(buffer, 0, BUF_SIZE);
 
@@ -478,6 +481,7 @@ void *auction_receiver(void *arg)
         }
     }
 
+    pthread_exit(NULL);
     return NULL;
 }
 
