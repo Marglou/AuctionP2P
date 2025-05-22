@@ -46,6 +46,7 @@ struct Multicast {
 typedef struct {
     int sock;           // Socket de l'enchère
     // char group[INET6_ADDRSTRLEN];  // Groupe de l'enchère
+    pthread_t thread_id; // ID du thread d'écoute
     struct in6_addr group; // Adresse IPv6 du groupe d'enchère
     int id_enchere;     // ID de l'enchère
     int port_enchere; // Port de l'enchère

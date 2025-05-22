@@ -9,7 +9,8 @@ extern int is_superviseur;
 extern int enchere_supervise;
 
 // Initialize supervisor state
-void init_auction_supervisor();
+// void init_auction_supervisor();
+void init_auction_supervisor(uint32_t numv, uint32_t prix);
 
 // Clean up supervisor state
 void cleanup_auction_supervisor();

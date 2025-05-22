@@ -16,9 +16,6 @@
 #include "../include/enchere.h"
 #include "../include/utils.h"
 
-// Global variables for auction supervision
-// extern int is_superviseur;
-// extern int enchere_supervise;
 
 // Track current auction state
 uint32_t current_price = 0;
@@ -26,17 +23,16 @@ uint32_t current_numv = 0;
 uint16_t current_bidder = 0;
 
 // Timer variables for auction finalization
-#define INACTIVITY_TIMEOUT 30  // 30 seconds of inactivity before warning
-#define FINALIZATION_TIMEOUT 30  // 30 seconds after warning before finalization
+#define INACTIVITY_TIMEOUT 3  // 30 seconds of inactivity before warning
+#define FINALIZATION_TIMEOUT 3  // 30 seconds after warning before finalization
 time_t last_bid_time = 0;
 int warning_sent = 0;
 
 
-
-void init_auction_supervisor() {
-    is_superviseur = 1;
-    current_price = 0;
-    current_numv = 0;
+void init_auction_supervisor(uint32_t numv, uint32_t prix) {
+    p.encheres[p.enchere_active].is_superviseur = 1;
+    current_price = prix;
+    current_numv = numv;
     current_bidder = 0;
 }
 
@@ -54,24 +50,26 @@ void reset_auction_timer() {
 }
 
 void check_auction_timeout() {
-    if (!is_superviseur || !enchere_supervise) {
-        return;
-    }
+
 
     time_t current_time = time(NULL);
     time_t elapsed = current_time - last_bid_time;
 
     // If no warning sent and timeout reached, send warning
-    if (!warning_sent && elapsed >= INACTIVITY_TIMEOUT) {
+    // if (!warning_sent && elapsed >= INACTIVITY_TIMEOUT) {
+    if (warning_sent==0){
+        printf("i'm here\n");
         uint8_t warning_msg[11];
         if (msg_11(warning_msg, p.id_peer, current_numv, current_price) == 11) {
             send_msg_enchere(warning_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
             printf("[Superviseur] Envoi de l'avertissement de finalisation\n");
             warning_sent = 1;
+            return;
         }
     }
     // If warning was sent and final timeout reached, finalize auction
-    else if (warning_sent && elapsed >= (INACTIVITY_TIMEOUT + FINALIZATION_TIMEOUT)) {
+    // else if (warning_sent && elapsed >= (INACTIVITY_TIMEOUT + FINALIZATION_TIMEOUT)) {
+    else if (warning_sent) {
         uint8_t final_msg[11];
         if (msg_12(final_msg, current_bidder, current_numv, current_price) == 11) {
             send_msg_enchere(final_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
@@ -119,22 +117,13 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
 
         printf("[Superviseur] Validation de l'offre de pair %u\n", bidder_id);
 
-        // pthread_t thr_consensus;
-        // // Create a thread to handle consensus
-        // if (pthread_create(&thr_consensus, NULL, handle_consensus, NULL) != 0) {
-        //     fprintf(stderr, "Erreur lors de la création du thread de consensus.\n");
-        //     return -1;
-        // }
-        
         // Update current auction state
         current_price = prix;
         current_bidder = bidder_id;
         // Reset the auction timer
-        reset_auction_timer();
-        
+        reset_auction_timer();   
         return 0;
     }
-
     return -1;
 }
 
@@ -204,5 +193,3 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
     }
 }
 
-
-//-------------------------------------  CONSENSUS -------------------------------------

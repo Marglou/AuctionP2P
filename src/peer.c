@@ -1083,6 +1083,7 @@ void clean_peer() {
             // Libération de la liste des participants si allouée dynamiquement
             free_peer_list(p.encheres[i].liste_participants);  // à implémenter si nécessaire
             p.encheres[i].liste_participants = NULL;
+            pthread_join(p.encheres[i].thread_id, NULL); 
         }
     }
     if (p.ed_privkey) EVP_PKEY_free(p.ed_privkey);
