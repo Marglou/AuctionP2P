@@ -788,6 +788,12 @@ int gestion_reception_UDP() {
                 } else {
                     printf("Message 2 envoyé à l'enchère active.\n");
                 }
+
+                //si quitte enchere reinit parametre
+                if(strcmp(parsed_msg.mess,"quitter")==0){
+                    clean_encheres(p.encheres[p.enchere_active].id_enchere);
+                    p.enchere_active=-1;//Attention risque de probleme, on suppose qu'il n'y avait qu'une enchere active 
+                }
             }
 
 
@@ -950,6 +956,7 @@ void* listen_main_sockets(void* arg) {
 
                 if (strcmp(input, "lancer") == 0) {
                     creer_enchere();
+                    p.encheres[p.nb_encheres].my_id = p.id_peer;
                     continue;
                 }
                 else if (strcmp(input, "join") == 0) {
@@ -980,6 +987,10 @@ void* listen_main_sockets(void* arg) {
                     continue;
                 }
                 else if (strcmp(input, "quit") == 0) {
+                    if(p.encheres[p.enchere_active].sock>0){
+                        mettre_fin();
+                        continue;//PENSER A METTRE A JOUR ENCHERE NOMBRE ENCHERES ....
+                    }
                     clean_peer();
                     printf("Quitter le programme...\n");
                     break;
@@ -1035,7 +1046,36 @@ void* listen_main_sockets(void* arg) {
     return NULL;
 }
 
+int supp_peer_list(peer_list **h, int id) {
+    if (h == NULL || *h == NULL) {
+        printf("Liste vide, rien à supprimer.\n");
+        return -1;
+    }
 
+    peer_list *curr = h;
+    peer_list *prev = NULL;
+
+    while (curr != NULL) {
+        if (curr->id == id) {
+            if (prev == NULL) {
+                // Suppression du premier (tête de liste)
+                *h = curr->next;
+                printf("Suppression en tête : ID=%d\n", id);
+            } else {
+                // Suppression au milieu ou à la fin
+                prev->next = curr->next;
+                printf("Suppression d’un pair interne : ID=%d\n", id);
+            }
+            free(curr);
+            return 0;
+        }
+        prev = curr;
+        curr = curr->next;
+    }
+
+    printf("ID %d non trouvé dans la liste.\n", id);
+    return -1;
+}
 
 // -------------------  ------------------------------------------
 

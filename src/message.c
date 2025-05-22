@@ -210,6 +210,28 @@ int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t 
     return 11; // Total message size
 }
 
+// ---------------  CODE 13 ------------------------------------------------
+int msg_13(uint8_t *msg, uint16_t id)
+{
+    msg[0] = 13; // CODE = 51
+    msg[1] = (id >> 8) & 0xFF;
+    msg[2] = id & 0xFF;
+    return 3; // taille totale écrite
+}
+
+int parse_msg_13(uint8_t *msg, size_t msg_len, struct message_13 *msg_struct)
+{
+    if (msg_len < 3)
+        return -1; // message trop court
+
+    msg_struct->code = msg[0];
+    if (msg_struct->code != 13)
+        return -1;
+
+    msg_struct->id = (msg[1] << 8) | msg[2];
+    return 0;
+}
+
 // Function to create rejection messages (14, 15)
 int msg_14_15(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
     if (!msg) return -1;

@@ -181,17 +181,19 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
     }
 
     if (response[0] == 50) {
-        // Received message 50 - ID already taken, get new ID
+        
         struct message_50 msg_50;
         if (parse_msg_50(response, bytes_read, &msg_50) == 0) {
             printf("ID accepté \n");
+            p.encheres[p.nb_encheres].my_id = p.id_peer;
             //snprintf(id_peer, sizeof(id_peer), "%u", msg_50.id);
         }
     } else if (response[0] == 51) {
-        // Received message 51 - ID accepted
+        
         struct message_51 msg_51;
         if (parse_msg_51(response, bytes_read, &msg_51) == 0) {
             printf("nouveau ID : %u\n", msg_51.id);
+            p.encheres[p.nb_encheres].my_id = msg_51.id;
         }
     } else {
         printf("Message de réponse inattendu : %u\n", response[0]);

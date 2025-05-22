@@ -138,6 +138,11 @@ struct message_51 {
     uint16_t id;      // ID accepté
 };
 
+struct message_13 {
+    uint8_t code;     // = 51
+    uint16_t id;      // ID accepté
+};
+
 struct message_6 {
     uint8_t code;     // = 6
     uint16_t id;      // ID du pair P
@@ -217,9 +222,11 @@ int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t 
 int msg_14_15(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix);
 int msg_11(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix);
 int msg_12(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix);
+int msg_13(uint8_t *msg, uint16_t id);
 int parse_msg_8_9_10(uint8_t *msg, size_t msg_len, struct message_8 *msg_struct);
 int parse_msg_11(uint8_t *msg, size_t msg_len, FinalizationWarningMessage *msg_struct);
 int parse_msg_12(uint8_t *msg, size_t msg_len, FinalizationMessage *msg_struct);
+int parse_msg_13(uint8_t *msg, size_t msg_len, struct message_13 *msg_struct);
 
 int msg_1(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen);
 int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_out);

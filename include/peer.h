@@ -54,6 +54,7 @@ typedef struct {
     int numv; // Numéro de la vente
     struct peer_list *liste_participants; // Liste des pairs de cette enchère
     int is_superviseur; // Indique si le pair est superviseur de l'enchère
+    int my_id;
 } EnchereSocket;
 
 
@@ -127,6 +128,7 @@ void *listen_tcp_thread(void *arg);
 
 int connect_to_peers_and_send_info(peer_list *p, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
                                   uint16_t new_peer_port, unsigned char *new_peer_cle);
+int supp_peer_list(peer_list **h, int id);
 
 
 

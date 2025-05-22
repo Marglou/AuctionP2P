@@ -425,7 +425,7 @@ void *auction_receiver(void *arg)
                 }
 
             }
-            else if (code == 2 && p.encheres[p.enchere_active].is_superviseur == 0)
+            else if (code == 2 )
             {
                 printf("Message 2 reçu : début du consensus\n");
                 struct message_2 parsed_msg = {0};
@@ -434,12 +434,25 @@ void *auction_receiver(void *arg)
                 {
                     printf("Message 2 reçu : ID=%d, Message=%s\n NB=%d\n",
                            parsed_msg.id, parsed_msg.mess, parsed_msg.nb_validations);
-
-                    if (parsed_msg.nb_validations == p.encheres[p.enchere_active].nb_pairs - 1)
-                    {
-                        printf("Consensus atteint pour le message 2.\n");
-                        // Vérification des signatures ici si nécessaire
+                    if(parsed_msg.id != p.encheres[p.enchere_active].my_id){
+                        if (parsed_msg.nb_validations == p.encheres[p.enchere_active].nb_pairs - 1)
+                        {
+                            printf("Consensus atteint pour le message 2.\n");
+                            // Vérification des signatures ici si nécessaire
+                        }
+                        if (strcmp(parsed_msg.mess,"quitter")==0){
+                        
+                            int n = supp_peer_list(&p.encheres[p.enchere_active].liste_participants,parsed_msg.id);
+                            if (n==0){
+                                printf("suppresion du peer\n");
+                            }
+                            printf("avant: %d\n",p.encheres[p.enchere_active].nb_pairs);
+                            p.encheres[p.enchere_active].nb_pairs--;
+                            printf("apres: %d\n",p.encheres[p.enchere_active].nb_pairs);
+                        }
                     }
+
+                    
                 }
             }
             else if (code == 8 || code == 9 || code == 14 || code == 15)
@@ -466,6 +479,35 @@ void *auction_receiver(void *arg)
                 {
                     handle_auction_message(code, msg.id, msg.numv, msg.prix);
                 }
+            }else if (code == 13)
+            {
+                struct message_13 msg;
+                if(parse_msg_13(buffer,len,&msg)==0){
+                    if(msg.id!=p.encheres[p.enchere_active].my_id){
+                        printf("[ENCHERE] : message 10 recu : debut consensus\n");
+
+                        uint8_t consensus_msg[1024];
+                        char *message = "quitter";
+                        unsigned char *signature = NULL;
+                        size_t siglen = 0;
+
+                        if (!sign(p.ed_privkey, (unsigned char *)message, &signature, &siglen))
+                        {
+                            fprintf(stderr, "Erreur lors de la signature\n");
+                            return NULL;
+                        }
+
+                        int len_msg = msg_1(consensus_msg, msg.id, message, signature, siglen);
+                        if (len_msg > 0)
+                        {
+                            sendto(p.socket_udp, consensus_msg, len_msg, 0,
+                                (struct sockaddr *)&src, srclen);
+                            printf("Message de consensus 13 envoyé : %s\n", message);
+                        }
+                        
+                    }
+                }
+                
             }
             else
             {
@@ -601,6 +643,33 @@ void faire_offre(uint32_t prix)
     printf("Offre envoyée : PRIX=%u\n", prix);
 }
 
+void mettre_fin()
+{
+    if (p.enchere_active < 0) {
+        printf("Vous n'êtes pas dans une enchère active.\n");
+        return;
+    }
+    uint8_t msg[1 + 2]; // CODE + ID 
+    msg[0] = 13; 
+    uint16_t peer_id = (uint16_t)p.encheres[p.enchere_active].my_id;
+    uint16_t id_net = htons(peer_id);
+    // Copy values to message
+    memcpy(&msg[1], &id_net, 2);
+
+    // Send the bid message to the auction group
+/*     if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
+        fprintf(stderr, "Erreur lors de l'envoi pour quitter.\n");
+        return;
+    } */
+    if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.socket_udp) != 0) {
+        fprintf(stderr, "Erreur lors de l'envoi pour quitter.\n");
+        return;
+    }
+    printf("En cours pour partir\n");
+    
+}
+
+
 int send_msg_enchere(uint8_t *msg, size_t len, int num_enchere, int sock)
 {
     if (p.enchere_active < 0) {
@@ -629,4 +698,43 @@ int send_msg_enchere(uint8_t *msg, size_t len, int num_enchere, int sock)
     }
 
     return 0;
+}
+
+int clean_encheres(int id_enchere) {
+    // Quitter toutes les enchères (groupes multicast) et fermer les sockets
+    for (int i = 0; i < p.nb_encheres; i++) {
+        if (p.encheres[i].id_enchere == id_enchere){
+            if (p.encheres[i].sock >= 0) {
+                stop_threads = 1; // Attention 
+                struct ipv6_mreq mreq;
+                memset(&mreq, 0, sizeof(mreq));
+                memcpy(&mreq.ipv6mr_multiaddr, &p.encheres[i].group, sizeof(struct in6_addr));
+                mreq.ipv6mr_interface = p.global_iface_index;
+
+                // Se désabonner proprement du groupe multicast
+                if (setsockopt(p.encheres[i].sock, IPPROTO_IPV6, IPV6_LEAVE_GROUP, &mreq, sizeof(mreq)) < 0) {
+                    perror("setsockopt IPV6_LEAVE_GROUP");
+                }
+
+                // Libération de la liste des participants si allouée dynamiquement
+                free_peer_list(p.encheres[i].liste_participants);  // à implémenter si nécessaire
+                p.encheres[i].liste_participants = NULL;
+                pthread_join(p.encheres[i].thread_id, NULL); 
+                close(p.encheres[i].sock);
+                p.encheres[i].sock = -1;
+
+
+
+                // Décaler les enchères suivantes dans le tableau
+                for (int j = i; j < p.nb_encheres - 1; j++) {
+                    p.encheres[j] = p.encheres[j + 1];
+                }
+
+                p.nb_encheres--; // Décrémenter le nombre d’enchères
+                return 0; // Succès
+            }
+
+        }
+    }
+    return -1; // Pas trouvé
 }
