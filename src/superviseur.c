@@ -37,7 +37,7 @@ void init_auction_supervisor(uint32_t numv, uint32_t prix) {
 }
 
 void cleanup_auction_supervisor() {
-    is_superviseur = 0;
+    p.encheres[p.enchere_active].is_superviseur = 0;
     enchere_supervise = 0;
     current_price = 0;
     current_numv = 0;
@@ -78,7 +78,14 @@ void check_auction_timeout() {
             
             // Clean up supervisor state
             cleanup_auction_supervisor();
-        }
+
+            uint8_t relay_msg[11];
+            if (msg_8_9_10(relay_msg, 10, current_bidder, current_numv, current_price) == 11) {
+                send_msg_enchere(relay_msg, 11, p.enchere_active, p.socket_udp);
+            }
+           
+        } 
+        //return;
     }
 }
 

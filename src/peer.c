@@ -987,6 +987,10 @@ void* listen_main_sockets(void* arg) {
                 } 
                 else if (strcmp(input, "offre") == 0) {
                     // Surencherir
+                    if (p.encheres[p.enchere_active].numv == 0) {
+                        printf("Initier une vente auparavent\n");
+                        continue;
+                    }
                     if (sur_enchere() == -1) {
                         printf("Erreur lors de la surenchère.\n");
                     }
