@@ -35,7 +35,7 @@ int connexion_TCP (struct in6_addr ip, uint16_t port){
 
     // Set socket options
     struct timeval tv;
-    tv.tv_sec = 5;  // 5 seconds timeout
+    tv.tv_sec = 2;  // 5 seconds timeout
     tv.tv_usec = 0;
     setsockopt(socket_tcp_client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(socket_tcp_client, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
@@ -145,7 +145,7 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
 
     uint16_t peer_id = (uint16_t)p.id_peer;
 
-    if (msg_5(msg, peer_id, p.port_perso, CLE) != 134) {
+    if (msg_5(msg, peer_id, p.port_perso, p.adr_perso.sin6_addr, CLE) != 134) {
         printf("Erreur lors de la construction du message.\n");
         // SSL_CTX_free(ctx);
         // cleanup_ssl_connection(ssl);

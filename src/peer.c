@@ -47,9 +47,20 @@ void handle_sigint(int sig) {
         fprintf(stderr, "Erreur lors de l'envoi du message de départ.\n");
     }
 
-    if (is_superviseur) {
-        cleanup_auction_supervisor(); // Clean up supervisor state if we were a supervisor
+    if (p.enchere_active >= 0 && p.encheres[p.enchere_active].is_superviseur == 1) {
+        uint8_t msg_16[7];
+        if (msg_16_17(msg_16, 16, p.encheres[p.enchere_active].my_id, p.encheres[p.enchere_active].numv) != 7) {
+            fprintf(stderr, "Erreur lors de la création du message de départ.\n");
+        } else {
+            if (send_msg_enchere(msg_16, sizeof(msg_16), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
+                fprintf(stderr, "Erreur lors de l'envoi du message de départ.\n");
+            }
+        }
     }
+
+    // if (is_superviseur) {
+    //     cleanup_auction_supervisor(); // Clean up supervisor state if we were a supervisor
+    // }
 
     clean_peer();
     exit(0);
@@ -409,9 +420,10 @@ void *listen_tcp_thread(void *arg) {
                             // if (SSL_write(ssl, msg, msg_len) != msg_len) {
                                 perror("send msg_50");
                             } else {
+                                char ip_str[INET6_ADDRSTRLEN];
+                                inet_ntop(AF_INET6, &parsed_msg.ip, ip_str, sizeof(ip_str));
                                 printf("Message 50 envoyé à %s:%u avec ID=%u\n",
-                                inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
-                                ntohs(parsed_msg.port),parsed_msg.id);
+                                ip_str, ntohs(parsed_msg.port),parsed_msg.id);
                             }
                         }else{
                             uint16_t new_id = (int)rand()%25;  // À revoir
@@ -482,18 +494,23 @@ void *listen_tcp_thread(void *arg) {
 
                         printf("\n\n");
                         //Message 6, connexion aux autres peers
-                        printf("id=%d\n",parsed_msg.id);
-                        printf("nb participants enchere 1 %d\n", p.encheres[p.enchere_active].nb_pairs);
+                        // printf("id=%d\n",parsed_msg.id);
+                        printf("nb participants enchere 1 : %d\n", p.encheres[p.enchere_active].nb_pairs);
                         if (p.encheres[p.enchere_active].nb_pairs == 1){
                             printf("enchere avec une personne\n");
                         } else {
-                            printf("nb participants enchere 2 %d\n", p.encheres[p.enchere_active].nb_pairs);
+                            printf("nb participants enchere 2 : %d\n", p.encheres[p.enchere_active].nb_pairs);
                             connect_to_peers_and_send_info(p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
                             printf("envoye a tous is good\n");                            
                         }
-
-                        add_peer(&p.encheres[p.enchere_active].liste_participants,parsed_msg.id,parsed_msg.ip,parsed_msg.port,parsed_msg.cle);
-                        p.encheres[p.enchere_active].nb_pairs++;                       
+                        
+                        if (add_peer(&p.encheres[p.enchere_active].liste_participants,parsed_msg.id, parsed_msg.ip,parsed_msg.port,parsed_msg.cle) == 0) {
+                            printf("Peer ajouté avec succès : ID=%d, Port=%d\n", parsed_msg.id, parsed_msg.port);
+                            p.encheres[p.enchere_active].nb_pairs++;                       
+                        } else {
+                            supp_peer_list(&p.encheres[p.enchere_active].liste_participants,parsed_msg.id);
+                            fprintf(stderr, "Erreur lors de l'ajout du pair à la liste des participants.\n");
+                        }
                         printf("nb participants enchere 3 %d\n", p.encheres[p.enchere_active].nb_pairs);
                     }
                 }
@@ -529,7 +546,7 @@ void *listen_tcp_thread(void *arg) {
     return NULL;         
 }
 
-   
+  
 int gestion_reception_liaison() {
     char buf[1024];
     struct sockaddr_in6 src;
@@ -696,8 +713,7 @@ int gestion_reception_UDP() {
                 // Join the auction with the received information
                 printf("\n");
                 if (join_enchere(p.encheres[p.enchere_active].id_enchere, 
-                                str_ip, 
-                                p.encheres[p.enchere_active].port_enchere) != 0) {
+                                str_ip, p.encheres[p.enchere_active].port_enchere) != 0) {
                     fprintf(stderr, "Erreur lors de la jointure de l'enchère.\n");
                     memset(&p.encheres[p.enchere_active], 0, sizeof(EnchereSocket));
                     p.enchere_active = enchere_precedente; // Reset active auction
@@ -737,7 +753,24 @@ int gestion_reception_UDP() {
             p.encheres[p.enchere_active].nb_msg_1 += 1;
         }
 
-        printf("nb ms   %d       nB pairs  %d\n", p.encheres[p.enchere_active].nb_msg_1,p.encheres[p.enchere_active].nb_pairs-1);
+        // Verif pour le consensus 
+        if (strcmp(parsed_msg.mess, "superviseur") == 0) {
+           
+            if (parsed_msg.id > p.encheres[p.enchere_active].my_id) {
+                printf("Je suis peut être superviseur\n");
+            } else {
+                printf("Je ne suis pas le superviseur\n");
+                pthread_mutex_lock(&p.encheres[p.enchere_active].superviseur_mutex);
+                printf("superviseur %d\n", p.encheres[p.enchere_active].superviseur_actif);
+                p.encheres[p.enchere_active].superviseur_actif = 0;
+                printf("superviseur %d\n", p.encheres[p.enchere_active].superviseur_actif);
+                pthread_cond_signal(&p.encheres[p.enchere_active].superviseur_cond);  // Réveille le thread en attente
+                pthread_mutex_unlock(&p.encheres[p.enchere_active].superviseur_mutex);
+                return 0;
+            }
+        }
+
+        printf("nb ms   %d  nB pairs  %d\n", p.encheres[p.enchere_active].nb_msg_1,p.encheres[p.enchere_active].nb_pairs-1);
         if (p.encheres[p.enchere_active].nb_msg_1 == p.encheres[p.enchere_active].nb_pairs-1) { // Attention
             printf("Consensus atteint pour le message 1.\n");
             // ENVOIE MSG 2
@@ -793,6 +826,19 @@ int gestion_reception_UDP() {
                 if(strcmp(parsed_msg.mess,"quitter")==0){
                     clean_encheres(p.encheres[p.enchere_active].id_enchere);
                     p.enchere_active=-1;//Attention risque de probleme, on suppose qu'il n'y avait qu'une enchere active 
+                } else if (strcmp(parsed_msg.mess, "superviseur") != 0) {
+                    // Envoi du message 3
+                    uint8_t msg_17[7];
+                    if (msg_16_17(msg_17, 17, p.encheres[p.enchere_active].my_id, p.encheres[p.enchere_active].numv) != 7) {
+                        fprintf(stderr, "Erreur lors de la construction du message 17.\n");
+                        return -1;
+                    }
+                    if (send_msg_enchere(msg_17, sizeof(msg_17), p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
+                        perror("send_msg_enchere");
+                        return -1;
+                    } else {
+                        printf("Message 17 envoyé à l'enchère active.\n");
+                    }
                 }
             }
 
@@ -1094,10 +1140,10 @@ int supp_peer_list(peer_list **h, int id) {
 // -------------------  ------------------------------------------
 
 void clean_peer() {
-
-    if (already_cleaned) {
-        return;
-    }
+    printf("Nettoyage du pair...\n");
+    // if (already_cleaned ) {
+    //     return;
+    // }
     // Quitter toutes les enchères (groupes multicast) et fermer les sockets
     for (int i = 0; i < p.nb_encheres; i++) {
         if (p.encheres[i].sock >= 0) {
@@ -1114,7 +1160,12 @@ void clean_peer() {
             // Libération de la liste des participants si allouée dynamiquement
             free_peer_list(p.encheres[i].liste_participants);  // à implémenter si nécessaire
             p.encheres[i].liste_participants = NULL;
+            pthread_cancel(p.encheres[i].thread_id); // Annuler le thread de l'enchère
             pthread_join(p.encheres[i].thread_id, NULL); 
+
+            // Maintenant que le thread est terminé, on peut détruire les objets
+            pthread_mutex_destroy(&p.encheres[i].superviseur_mutex);
+            pthread_cond_destroy(&p.encheres[i].superviseur_cond);
             close(p.encheres[i].sock);
             p.encheres[i].sock = -1;
         }
@@ -1163,7 +1214,6 @@ void clean_peer() {
 
     // Clean up UDP response manager
     cleanup_udp_response_manager(&p.udp_responses);
-
     printf("Peer nettoyé proprement.\n");
 }
 
@@ -1173,9 +1223,15 @@ void clean_peer() {
 int connect_to_peers_and_send_info(peer_list *h, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
                                   uint16_t new_peer_port, unsigned char *new_peer_cle) {
      int ret = 0;
-    peer_list *current = h->next;
+    // peer_list *current = h->next;
+    peer_list *current = h;
+
     
-     while (current != NULL) {
+    while (current != NULL) {
+        char ip_str[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, &new_peer_ip, ip_str, sizeof(ip_str));
+        printf("info peer id %d, port %d\n", current->id, current->port_tcp);
+        printf("info peer ip %s\n", ip_str, NULL, 0);
          // Create TLS connection to the peer
          if(current->id==p.id_peer){
             current=current->next;
@@ -1306,6 +1362,7 @@ int connect_to_peers_and_send_info(peer_list *h, uint16_t new_peer_id, struct in
 //     return -1; // No free ID found
 // }
 
+
 int add_peer(peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
     peer_list *new_peer = malloc(sizeof(peer_list));
     if (!new_peer) {
@@ -1315,15 +1372,25 @@ int add_peer(peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, u
 
     new_peer->id = id;
     new_peer->ip = ip;
+
+    char ip_str[INET6_ADDRSTRLEN];
+    if (inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str)) == NULL) {
+        perror("inet_ntop");
+        free(new_peer);
+        return -1;
+    }
+    printf("Ajout peer IP %s\n", ip_str);
+
     new_peer->port_tcp = port;
+
     if (cle != NULL) {
         memcpy(new_peer->cle, cle, 113);
     } else {
         memset(new_peer->cle, 0, 113);
     }
-    new_peer->next = *head; // Insertion en tête
+
+    new_peer->next = *head;
     *head = new_peer;
 
     return 0;
 }
-

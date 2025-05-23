@@ -98,9 +98,9 @@ int parse_msg_4(uint8_t *msg, size_t msg_len, struct message_4 *msg_struct)
 
 // --------------------------- CODE 5 -----------------------------------------------
 
-int msg_5(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, unsigned char *public_key)
+int msg_5(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, struct in6_addr ip, unsigned char *public_key)
 {
-    struct in6_addr ip;
+    // struct in6_addr ip;
     size_t offset = 0;
     msg[offset++] = 5; // CODE = 5
 
@@ -346,40 +346,6 @@ int parse_msg_1(const uint8_t *buf, size_t len, struct message_1 *msg) {
 
 
 // ---------------------------------- CODE 2   -------------------------------------------
-// int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations) {
-//     uint8_t codemsg = 1;
-//     uint8_t lmess = (uint8_t)strlen(mess);
-
-//     if (lmess > 255 || siglen > 255) return -1;  // sécurité
-
-//     uint16_t net_id = htons(id); // 2 octets en réseau
-
-//     size_t offset = 0;
-
-//     msg[offset++] = codemsg;
-
-//     memcpy(msg + offset, &net_id, sizeof(net_id));
-//     offset += sizeof(net_id);
-
-//     msg[offset++] = lmess;
-
-//     memcpy(msg + offset, mess, lmess);
-//     offset += lmess;
-
-//     msg[offset++] = siglen;
-
-//     if (siglen > 0) {
-//         memcpy(msg + offset, sig, siglen);
-//         offset += siglen;
-//     }
-
-//     // Ajout du nombre de validations sur 2 octets
-//     uint16_t net_nb_validations = htons(nb_validations);
-//     memcpy(msg + offset, &net_nb_validations, sizeof(net_nb_validations));
-//     offset += sizeof(net_nb_validations);
-
-//     return 0;  
-// }
 int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations) {
     uint8_t codemsg = 2;
     uint8_t lmess = (uint8_t)strlen(mess);
@@ -493,6 +459,54 @@ int parse_msg_16_17(uint8_t *msg, size_t msg_len, struct message_16_17 *msg_stru
     return 0;
 }
 
+int msg_30(uint8_t *buf, uint32_t numv, char *mess) {
+    if (!buf || !mess) return -1;
+
+    buf[0] = 30; // CODE = 30
+
+    uint32_t numv_net = htonl(numv);
+    memcpy(&buf[1], &numv_net, sizeof(numv_net)); // NUMV = 4 octets
+
+    uint8_t lmess = (uint8_t)strlen(mess); // longueur du message
+    buf[5] = lmess; // ECRIRE lmess (important !)
+    memcpy(&buf[6], mess, lmess); // contenu du message
+
+    // Affichage debug
+    printf("msg_30 : CODE=30, numv=%u, lmess=%u, mess=%s\n", numv, lmess, mess);
+
+    return 6 + lmess; // taille totale du message
+}
+
+
+
+int parse_msg_30(uint8_t *msg, size_t len, struct message_30 *out) {
+    if (len < 6) return -1; // CODE(1) + NUMV(4) + LMESS(1) = 6 octets mini
+
+    size_t offset = 0;
+
+    uint8_t code = msg[offset++];
+    if (code != 30) return -2;
+    out->code = code;
+
+    out->numv = ntohl(*(uint32_t *)(msg + offset));
+    offset += 4;
+
+    out->lmess = msg[offset++];
+    if (out->lmess > 255 || offset + out->lmess > len)
+        return -3;
+
+    memcpy(out->mess, msg + offset, out->lmess);
+    out->mess[out->lmess] = '\0'; // terminaison
+
+    // Affichage debug
+    printf("parse_msg_30 : code=%d, numv=%u, lmess=%u, mess=%s\n",
+           out->code, out->numv, out->lmess, out->mess);
+
+    return 0;
+}
+
+
+
 void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t numv, uint16_t *ids_disparus, uint16_t nb)
 {
     if (superviseur)
@@ -553,7 +567,6 @@ void envoyer_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t 
     send(socket, &msg, sizeof(msg), 0);
 }
 
-
 void envoyer_finalisation_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t prix)
 {
     FinalisationVenteMessage msg;
@@ -574,7 +587,6 @@ void envoyer_finalisation_vente(int socket, bool etape, uint16_t id, uint32_t nu
 
     send(socket, &msg, sizeof(msg), 0);
 }
-
 
 // Fonction pour envoyer le message
 void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix)
@@ -1051,6 +1063,10 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
     }
 
     // Ajouter le peer à la liste des participants de l'enchère
+    // print ip 
+    char str_ip[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &ip, str_ip, INET6_ADDRSTRLEN);
+    printf("Debug - IP du peer : %s\n", str_ip);
     if (add_peer(&enchere->liste_participants, id, ip, port, cle) != 0) {
         fprintf(stderr, "Erreur lors de l'ajout du peer à la liste des participants.\n");
         return -1;

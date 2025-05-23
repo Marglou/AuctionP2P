@@ -74,7 +74,7 @@ int join_enchere(int id, char *group, uint16_t port) {
     // Debug print the multicast address
     char addr_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &mreq.ipv6mr_multiaddr, addr_str, sizeof(addr_str));
-    printf("Debug - Converted multicast address: %s\n", addr_str);
+    // printf("Debug - Converted multicast address: %s\n", addr_str);
 
     // Verify this is a valid multicast address
     if (!IN6_IS_ADDR_MULTICAST(&mreq.ipv6mr_multiaddr)) {
@@ -86,8 +86,7 @@ int join_enchere(int id, char *group, uint16_t port) {
     // Set the interface index
     mreq.ipv6mr_interface = p.global_iface_index;
 
-    printf("Debug - Joining multicast group %s on interface (index %d)\n", 
-           addr_str, p.global_iface_index);
+    // printf("Debug - Joining multicast group %s on interface (index %d)\n", addr_str, p.global_iface_index);
 
     if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) < 0) {
         perror("setsockopt (join group enchere)");
@@ -180,7 +179,7 @@ void creer_enchere()
     snprintf(auction_group, sizeof(auction_group), "ff12::%04x", r); // Ensure 4 hex digits with leading zeros
 
     // Debug print the generated multicast address
-    printf("Debug - Generated multicast address: %s\n", auction_group);
+    // printf("Debug - Generated multicast address: %s\n", auction_group);
 
     p.enchere_active++;
     p.encheres[p.enchere_active].id_enchere = auction_num_id;
@@ -233,7 +232,6 @@ void creer_enchere()
     inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, ip_str, sizeof(ip_str));
     printf("Enchère initiée : ID=%d, ADR=%s\n", auction_num_id, ip_str);
 
-
 }
 
 // ----------------------------------------------------------------------------
@@ -265,6 +263,20 @@ int msg_join_enchere()
     return 0;
 }
 
+void *gestion_disp_superviseur(void *arg)
+{
+    printf("Thread de supervision lancé\n");
+    pthread_mutex_lock(&p.encheres[p.enchere_active].superviseur_mutex);
+    while (p.encheres[p.enchere_active].superviseur_actif) {
+        pthread_cond_wait(&p.encheres[p.enchere_active].superviseur_cond, &p.encheres[p.enchere_active].superviseur_mutex);
+        // Réveillé quand superviseur_actif peut avoir changé
+    }
+    pthread_mutex_unlock(&p.encheres[p.enchere_active].superviseur_mutex);
+    printf("Thread de supervision arrêté\n");
+    pthread_exit(NULL);
+}
+
+
 // Thread pour recevoir les messages du groupe d'enchères
 void *auction_receiver(void *arg)
 {
@@ -288,7 +300,7 @@ void *auction_receiver(void *arg)
         FD_SET(sock, &readfds);
 
         struct timeval timeout;
-        timeout.tv_sec = 10;   // 5 secondes d'attente maximum
+        timeout.tv_sec = 3;   // 5 secondes d'attente maximum
         timeout.tv_usec = 0;
 
         int ready = select(sock + 1, &readfds, NULL, NULL, &timeout);
@@ -333,7 +345,7 @@ void *auction_receiver(void *arg)
                     return NULL;
                 }
 
-                int len_msg = msg_1(consensus_msg, p.id_peer, message, signature, siglen);
+                int len_msg = msg_1(consensus_msg, p.id_peer, message, signature, siglen); // Attention
                 if (len_msg > 0)
                 {
                     // Track the UDP message before sending
@@ -360,8 +372,17 @@ void *auction_receiver(void *arg)
                         if (parsed_msg.nb_validations == p.encheres[p.enchere_active].nb_pairs - 1)
                         {
                             printf("Consensus atteint pour le message 2.\n");
-                            p.encheres[p.enchere_active].consensus == 0;
+                            p.encheres[p.enchere_active].consensus = 0;
                             // Vérification des signatures ici si nécessaire
+                        }
+                        if (strcmp(parsed_msg.mess,"superviseur")==0){
+                            printf("Message Nouveau SUperviseur\n");
+                            p.encheres[p.enchere_active].is_superviseur = 1;
+                            pthread_mutex_lock(&p.encheres[p.enchere_active].superviseur_mutex);
+                            p.encheres[p.enchere_active].superviseur_actif = 0;
+                            pthread_cond_signal(&p.encheres[p.enchere_active].superviseur_cond);  // Réveille le thread en attente
+                            pthread_mutex_unlock(&p.encheres[p.enchere_active].superviseur_mutex);
+                            return 0;
                         }
                         if (strcmp(parsed_msg.mess,"quitter")==0){
                         
@@ -433,6 +454,80 @@ void *auction_receiver(void *arg)
                     }
                 }
                 
+            }
+            else if (code == 16 ) {
+                if (p.encheres[p.enchere_active].is_superviseur == 1) {
+                    stop_threads = 1;
+                    break;
+                }
+                struct message_16_17 msg;
+                if (parse_msg_16_17(buffer, len, &msg) == 0) {
+                    printf("\n\nMessage 16 reçu : ID=%d, NUMV=%u,\n", msg.id, msg.numv);
+                    if (supp_peer_list(&p.encheres[p.enchere_active].liste_participants, msg.id) == 0) {
+                        printf("Peer %d supprimé de la liste des participants.\n", msg.id);
+                        p.encheres[p.enchere_active].nb_pairs--;
+
+                        if (p.encheres[p.enchere_active].nb_pairs == 1){
+                            printf("Seul au monde, je suis superviseur\n");
+                            p.encheres[p.enchere_active].is_superviseur = 1;
+                            return 0;
+                        }
+
+                        if (p.encheres[p.enchere_active].is_superviseur == 0){                        
+                            // MSG 30 pour enclencher le consensus
+                            uint8_t consensus_msg[1024];
+                            char *message = "superviseur";
+                            if (msg_30(consensus_msg, p.encheres[p.enchere_active].numv, message) < 0) {
+                                fprintf(stderr, "Erreur lors de la construction du message 30.\n");
+                                return NULL;
+                            }
+                            // Envoi du message 30
+                            send_msg_enchere(consensus_msg, sizeof(consensus_msg), p.enchere_active, p.socket_udp);
+                            printf("Message de consensus 30 envoyé : %s\n", message);
+
+                            // lancer thread consensus 
+                            p.encheres[p.enchere_active].superviseur_actif = 1;
+                            pthread_mutex_init(&p.encheres[p.enchere_active].superviseur_mutex, NULL);
+                            pthread_cond_init(&p.encheres[p.enchere_active].superviseur_cond, NULL);
+                            pthread_create(&p.encheres[p.enchere_active].tid_consensus, NULL, gestion_disp_superviseur, NULL);
+                        }
+
+                    } else {
+                        printf("Erreur lors de la suppression du peer %d de la liste des participants.\n", msg.id);
+                    }
+                }
+            }
+            else if (code == 30) {
+                struct message_30 msg;
+                if (parse_msg_30(buffer, len, &msg) == 0) {
+                    printf("Message 30 reçu : NUMV=%u Mess=%s\n", msg.numv, msg.mess);
+                    uint8_t consensus_msg[1024];
+                    unsigned char *signature = NULL;
+                    size_t siglen = 0;
+                    if (!sign(p.ed_privkey, (unsigned char *)msg.mess, &signature, &siglen))
+                    {
+                        fprintf(stderr, "Erreur lors de la signature\n");
+                        return NULL;
+                    }
+
+                    int len_msg = msg_1(consensus_msg, p.encheres[p.enchere_active].my_id, msg.mess, signature, siglen);
+                    if (len_msg > 0)
+                    {
+                        sendto(p.socket_udp, consensus_msg, len_msg, 0,
+                            (struct sockaddr *)&src, srclen);
+                        printf("Message de consensus superviseur envoyé : %s\n", msg.mess);
+                    }
+                    // Handle the message as needed
+                }
+            }
+            else if (code == 17) {
+                struct message_16_17 msg;
+                if (parse_msg_16_17(buffer, len, &msg) == 0) {
+                    printf("Message 17 reçu : ID=%d, NUMV=%u\n", msg.id, msg.numv);
+                    printf("superviseur %d\n", p.encheres[p.enchere_active].superviseur_actif);
+                    // Handle the message as needed
+                }
+
             }
             else
             {

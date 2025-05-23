@@ -58,6 +58,10 @@ typedef struct {
     int my_id;
     int consensus;
     int nb_msg_1;
+    pthread_t tid_consensus;
+    int superviseur_actif;  // variable de contrôle
+    pthread_mutex_t superviseur_mutex;
+    pthread_cond_t superviseur_cond;
 } EnchereSocket;
 
 

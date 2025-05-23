@@ -208,12 +208,19 @@ struct message_16_17 {
     uint32_t numv;    // Port TCP de P
 };
 
+struct message_30 {
+    uint8_t code;     // Devrait être 30
+    uint32_t numv;    // En uint32, converti depuis réseau
+    uint8_t lmess;      // longueur du message MESS
+    char mess[256];         // pointeur vers message 
+};
+
 //--------------------------------------------------------------------------------------------------
 // Prototypes de fonctions
 int msg_4 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp);
 int parse_msg_4 (uint8_t *msg, size_t msg_len, struct message_4 *msg_struct);
 
-int msg_5 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, unsigned char *public_key);
+int msg_5 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, struct in6_addr ip, unsigned char *public_key);
 int parse_msg_5 (uint8_t *msg, size_t msg_len, struct message_5 *msg_struct);
 
 int msg_50(uint8_t *msg);
@@ -268,5 +275,10 @@ int get_adresse_perso_from_socket(int sock, struct in6_addr *addr);
 
 int msg_18(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *ids);
 int parse_msg_18(uint8_t *msg, size_t msg_len, struct message_18 *msg_struct);
+
+int msg_16_17(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv);
+int parse_msg_16_17(uint8_t *msg, size_t msg_len, struct message_16_17 *msg_struct);
+int msg_30(uint8_t *buf, uint32_t numv, char *mess);
+int parse_msg_30 (uint8_t *msg, size_t len, struct message_30 *out);
 
 #endif // MESSAGE_H
