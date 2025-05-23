@@ -529,6 +529,15 @@ void *auction_receiver(void *arg)
                 }
 
             }
+            else if (code == 51){
+                struct message_51 msg;
+                if (parse_msg_51(buffer, len, &msg) == 0){
+                    if (supp_peer_list(&p.encheres[p.enchere_active].liste_participants, msg.id) == 0){
+                        p.encheres[p.enchere_active].nb_pairs--;
+                        printf("Peer id  supprimer: %d\n", msg.id);
+                    }
+                }
+            }
             else
             {
                 // Message texte brut
@@ -736,6 +745,7 @@ int clean_encheres(int id_enchere) {
                 // Libération de la liste des participants si allouée dynamiquement
                 free_peer_list(p.encheres[i].liste_participants);  // à implémenter si nécessaire
                 p.encheres[i].liste_participants = NULL;
+                pthread_cancel(p.encheres[i].thread_id); // Annuler le thread de l'enchère
                 pthread_join(p.encheres[i].thread_id, NULL); 
                 close(p.encheres[i].sock);
                 p.encheres[i].sock = -1;

@@ -56,6 +56,15 @@ void handle_sigint(int sig) {
                 fprintf(stderr, "Erreur lors de l'envoi du message de départ.\n");
             }
         }
+    } else if (p.enchere_active >= 0) {
+        uint8_t msg[3];
+        if (msg_51(msg, p.encheres[p.enchere_active].my_id) != 3) {
+            fprintf(stderr, "Erreur lors de la création du message de départ.\n");
+        } else {
+            if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.encheres[p.enchere_active].sock) <= 0) {
+                fprintf(stderr, "Erreur lors de l'envoi du message de départ.\n");
+            }
+        }
     }
 
     // if (is_superviseur) {
@@ -824,8 +833,10 @@ int gestion_reception_UDP() {
 
                 //si quitte enchere reinit parametre
                 if(strcmp(parsed_msg.mess,"quitter")==0){
+                    printf("quitter enchere\n");
                     clean_encheres(p.encheres[p.enchere_active].id_enchere);
-                    p.enchere_active=-1;//Attention risque de probleme, on suppose qu'il n'y avait qu'une enchere active 
+                    p.enchere_active = -1;//Attention risque de probleme, on suppose qu'il n'y avait qu'une enchere active 
+                    p.nb_encheres --;
                 } else if (strcmp(parsed_msg.mess, "superviseur") != 0) {
                     // Envoi du message 3
                     uint8_t msg_17[7];
@@ -1040,8 +1051,15 @@ void* listen_main_sockets(void* arg) {
                     if(p.encheres[p.enchere_active].sock>0 && p.encheres[p.enchere_active].nb_pairs > 1){
                         mettre_fin();
                         continue;//PENSER A METTRE A JOUR ENCHERE NOMBRE ENCHERES ....
-                    } else if (p.encheres[p.enchere_active].nb_pairs == 0){
+                    } else if (p.encheres[p.enchere_active].nb_pairs == 1){
                         // Attention refaire tout le process avec stop_thread ahahahahaah
+                        if (clean_encheres(p.encheres[p.enchere_active].id_enchere) != 0 ){
+                            printf("Erreur qd on veut partir\n");
+                            clean_peer();
+                        }
+                        printf("je suis partieeeeee\n");
+                        p.enchere_active = -1;
+                        p.nb_encheres--;
                         continue;
                     }
                     
