@@ -1057,7 +1057,7 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
     }
 
     // Incrémenter le nombre de pairs dans l'enchère
-    // enchere->nb_pairs++;
+    p.encheres[p.enchere_active].nb_pairs += 1;
 
     printf("Peer ajouté avec succès : ID=%d, Port=%d\n", id, port);
     return 0;

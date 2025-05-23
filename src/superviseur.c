@@ -92,6 +92,7 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
     if (p.encheres[p.enchere_active].is_superviseur==0) {
         return -1;
     }
+    printf("JE SUIS LA consensus %d\n", p.encheres[p.enchere_active].consensus);
     if(p.encheres[p.enchere_active].consensus==1){
             // Check if this is a competing bid
         if (numv != p.encheres[enchere_supervise].numv) {
@@ -128,7 +129,6 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
         current_bidder = bidder_id;
         // Reset the auction timer
         reset_auction_timer();   
-        p.encheres[p.enchere_active].consensus = 1;
         return 0;
     }
     return -1;
@@ -160,6 +160,7 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
             
             // If we are the supervisor, validate the bid
             if (p.encheres[p.enchere_active].is_superviseur == 1) {
+                p.encheres[p.enchere_active].consensus = 1;
                 validate_bid(id, numv, prix);
             }
             break;

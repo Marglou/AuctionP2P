@@ -184,8 +184,10 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
         
         struct message_50 msg_50;
         if (parse_msg_50(response, bytes_read, &msg_50) == 0) {
-            printf("ID accepté \n");
+            printf("ID accepté   enchere active %d\n", p.enchere_active);
+
             p.encheres[p.nb_encheres].my_id = p.id_peer;
+            printf("MY ID %d\n", p.encheres[p.nb_encheres].my_id);
             //snprintf(id_peer, sizeof(id_peer), "%u", msg_50.id);
         }
     } else if (response[0] == 51) {

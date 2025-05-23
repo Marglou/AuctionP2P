@@ -679,6 +679,7 @@ int gestion_reception_UDP() {
 
                 int enchere_precedente = p.enchere_active; // Enchère précédente
                 p.enchere_active = p.nb_encheres; // Indique que nous avons rejoint l'enchère active
+                printf("enchere active %d    nb enchere %d\n", p.enchere_active, p.nb_encheres);
                 // Print the decoded message details
                 char str_ip[INET6_ADDRSTRLEN];
                 if (inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, str_ip, sizeof(str_ip)) == NULL) {
@@ -712,6 +713,7 @@ int gestion_reception_UDP() {
                 memset(&p.discovered_peers, 0, sizeof(p.discovered_peers));
                 close(socket_P);
                 // cleanup_ssl_connection(ssl);
+                //printf("nb pair %d\n", p.encheres[p.enchere_active].nb_pairs);
                 return 0;
             }
 
@@ -735,6 +737,7 @@ int gestion_reception_UDP() {
             p.encheres[p.enchere_active].nb_msg_1 += 1;
         }
 
+        printf("nb ms   %d       nB pairs  %d\n", p.encheres[p.enchere_active].nb_msg_1,p.encheres[p.enchere_active].nb_pairs-1);
         if (p.encheres[p.enchere_active].nb_msg_1 == p.encheres[p.enchere_active].nb_pairs-1) { // Attention
             printf("Consensus atteint pour le message 1.\n");
             // ENVOIE MSG 2
@@ -766,14 +769,11 @@ int gestion_reception_UDP() {
                     uint16_t id_net = htons(cur->id);
                     memcpy(msg + offset, &id_net, sizeof(uint16_t));
                     offset += sizeof(uint16_t);
-
                     // Ajout de la longueur de la signature (1 octet)
                     msg[offset++] = cur->lsig;
-
                     // Ajout de la signature (lsig octets)
                     memcpy(msg + offset, cur->sig, cur->lsig);
                     offset += cur->lsig;
-
                     cur = cur->next;
                 }
                 printf("MESSAGE 2 partie 2 OK\n");
@@ -787,6 +787,7 @@ int gestion_reception_UDP() {
                     printf("Message 2 envoyé à l'enchère active.\n");
                     p.encheres[p.enchere_active].nb_msg_1 = 0; // Attention
                 }
+                p.encheres[p.enchere_active].consensus = 0;
 
                 //si quitte enchere reinit parametre
                 if(strcmp(parsed_msg.mess,"quitter")==0){
@@ -959,7 +960,7 @@ void* listen_main_sockets(void* arg) {
 
                 if (strcmp(input, "lancer") == 0) {
                     creer_enchere();
-                    p.encheres[p.nb_encheres].my_id = p.id_peer;
+                    p.encheres[p.enchere_active].my_id = p.id_peer;
                     continue;
                 }
                 else if (strcmp(input, "join") == 0) {
@@ -992,8 +993,6 @@ void* listen_main_sockets(void* arg) {
                 else if (strcmp(input, "quit") == 0) {
                     if(p.encheres[p.enchere_active].sock>0 && p.encheres[p.enchere_active].nb_pairs > 1){
                         mettre_fin();
-                        p.enchere_active = -1;
-                        p.nb_encheres--;
                         continue;//PENSER A METTRE A JOUR ENCHERE NOMBRE ENCHERES ....
                     } else if (p.encheres[p.enchere_active].nb_pairs == 0){
                         // Attention refaire tout le process avec stop_thread ahahahahaah
