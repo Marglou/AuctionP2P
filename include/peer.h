@@ -56,7 +56,8 @@ typedef struct {
     struct peer_list *liste_participants; // Liste des pairs de cette enchère
     int is_superviseur; // Indique si le pair est superviseur de l'enchère
     int my_id;
-    //int consensus;
+    int consensus;
+    int nb_msg_1;
 } EnchereSocket;
 
 

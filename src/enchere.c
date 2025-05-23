@@ -375,7 +375,7 @@ void *auction_receiver(void *arg)
         FD_SET(sock, &readfds);
 
         struct timeval timeout;
-        timeout.tv_sec = 5;   // 5 secondes d'attente maximum
+        timeout.tv_sec = 10;   // 5 secondes d'attente maximum
         timeout.tv_usec = 0;
 
         int ready = select(sock + 1, &readfds, NULL, NULL, &timeout);
@@ -385,8 +385,9 @@ void *auction_receiver(void *arg)
             perror("select");
             break;
         }
-        else if (ready == 0  && p.encheres[p.enchere_active].is_superviseur == 1 && p.encheres[p.enchere_active].numv != 0)
+        else if (ready == 0  && p.encheres[p.enchere_active].is_superviseur == 1 && p.encheres[p.enchere_active].numv != 0 && p.encheres[p.enchere_active].consensus == 0)
         {
+            //ajouter consensus && p.encheres[p.enchere_active].consensus == 0
             // Aucun message reçu pendant 5 secondes
             printf("Aucun message reçu depuis 5 secondes\n");
             check_auction_timeout(); // Traitement de timeout
@@ -402,7 +403,7 @@ void *auction_receiver(void *arg)
             buffer[len] = '\0';
             uint8_t code = (uint8_t)buffer[0];
 
-            if (code == 10)
+            if (code == 10 && p.encheres[p.enchere_active].is_superviseur == 0)
             {
                 printf("[ENCHERE] : message 10 recu : debut consensus\n");
 
@@ -410,10 +411,12 @@ void *auction_receiver(void *arg)
                 char *message = "Je valide la vente";
                 unsigned char *signature = NULL;
                 size_t siglen = 0;
+                p.encheres[p.enchere_active].consensus=1;
 
                 if (!sign(p.ed_privkey, (unsigned char *)message, &signature, &siglen))
                 {
                     fprintf(stderr, "Erreur lors de la signature\n");
+                    p.encheres[p.enchere_active].consensus=0;
                     return NULL;
                 }
 
@@ -421,9 +424,9 @@ void *auction_receiver(void *arg)
                 if (len_msg > 0)
                 {
                     // Track the UDP message before sending
-                    if (track_udp_message(&p.udp_responses, 1, p.id_peer, consensus_msg, len_msg) != 0) {
+                    /*if (track_udp_message(&p.udp_responses, 1, p.id_peer, consensus_msg, len_msg) != 0) {
                         fprintf(stderr, "Failed to track UDP message 1\n");
-                    }
+                    }*/
                     
                     sendto(p.socket_udp, consensus_msg, len_msg, 0,
                            (struct sockaddr *)&src, srclen);
@@ -444,6 +447,7 @@ void *auction_receiver(void *arg)
                         if (parsed_msg.nb_validations == p.encheres[p.enchere_active].nb_pairs - 1)
                         {
                             printf("Consensus atteint pour le message 2.\n");
+                            p.encheres[p.enchere_active].consensus == 0;
                             // Vérification des signatures ici si nécessaire
                         }
                         if (strcmp(parsed_msg.mess,"quitter")==0){
@@ -490,7 +494,7 @@ void *auction_receiver(void *arg)
                 struct message_13 msg;
                 if(parse_msg_13(buffer,len,&msg)==0){
                     if(msg.id!=p.encheres[p.enchere_active].my_id){
-                        printf("[ENCHERE] : message 10 recu : debut consensus\n");
+                        printf("[ENCHERE] : message 13 recu : debut consensus\n");
 
                         uint8_t consensus_msg[1024];
                         char *message = "quitter";
@@ -586,6 +590,7 @@ int init_vente () {
     enchere_supervise = p.enchere_active;
     p.encheres[p.enchere_active].numv = numv;
     init_auction_supervisor(numv, initial_price);
+    p.encheres[p.enchere_active].is_superviseur == 1;
 }
 
 int sur_enchere() {
@@ -663,10 +668,6 @@ void mettre_fin()
     memcpy(&msg[1], &id_net, 2);
 
     // Send the bid message to the auction group
-/*     if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
-        fprintf(stderr, "Erreur lors de l'envoi pour quitter.\n");
-        return;
-    } */
     if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.socket_udp) != 0) {
         fprintf(stderr, "Erreur lors de l'envoi pour quitter.\n");
         return;

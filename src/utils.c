@@ -416,9 +416,9 @@ int send_UDP (int sock, struct sockaddr_in6 *multicast_addr, char *msg, size_t m
         }
         
         // Track the message for response
-        if (track_udp_message(&p.udp_responses, code, peer_id, msg, msg_len) != 0) {
+       /*if (track_udp_message(&p.udp_responses, code, peer_id, msg, msg_len) != 0) {
             fprintf(stderr, "Warning: Failed to track UDP message for response\n");
-        }
+        }*/
     }
 
     return 0; // Succès
@@ -443,9 +443,9 @@ int send_multicast (int sock, char *msg, size_t msg_len) {
         }
         
         // Track the message for response
-        if (track_udp_message(&p.udp_responses, code, peer_id, msg, msg_len) != 0) {
+        /*if (track_udp_message(&p.udp_responses, code, peer_id, msg, msg_len) != 0) {
             fprintf(stderr, "Warning: Failed to track UDP message for response\n");
-        }
+        }*/
     }
 
     return 0; // Succès

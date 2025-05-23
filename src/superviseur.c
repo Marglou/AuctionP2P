@@ -89,31 +89,32 @@ void check_auction_timeout() {
 }
 
 int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
-    if (!is_superviseur) {
+    if (p.encheres[p.enchere_active].is_superviseur==0) {
         return -1;
     }
-
-    // Check if this is a competing bid
-    if (numv != p.encheres[enchere_supervise].numv) {
-        // Reject competing bid (code 14)
-        uint8_t reject_msg[11];
-        if (msg_14_15(reject_msg, 14, bidder_id, numv, prix) == 11) {
-            send_msg_enchere(reject_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
-            printf("[Superviseur] Rejet de l'offre concurrente de pair %u\n", bidder_id);
-        }
-        return -1;
+    if(p.encheres[p.enchere_active].consensus==1){
+            // Check if this is a competing bid
+        if (numv != p.encheres[enchere_supervise].numv) {
+            // Reject competing bid (code 14)
+            uint8_t reject_msg[11];
+            if (msg_14_15(reject_msg, 14, bidder_id, numv, prix) == 11) {
+                send_msg_enchere(reject_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
+                printf("[Superviseur] Rejet de l'offre concurrente de pair %u\n", bidder_id);
+            }
+            return -1;
+        }  
     }
-
     // Check if bid price is lower than current price
-    if (prix <= current_price) {
-        // Reject low bid (code 15)
-        uint8_t reject_msg[11];
-        if (msg_14_15(reject_msg, 15, bidder_id, numv, prix) == 11) {
-            send_msg_enchere(reject_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
-            printf("[Superviseur] Rejet de l'offre trop basse de pair %u\n", bidder_id);
+        if (prix <= current_price) {
+            // Reject low bid (code 15)
+            uint8_t reject_msg[11];
+            if (msg_14_15(reject_msg, 15, bidder_id, numv, prix) == 11) {
+                send_msg_enchere(reject_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
+                printf("[Superviseur] Rejet de l'offre trop basse de pair %u\n", bidder_id);
+            }
+            return -1;
         }
-        return -1;
-    }
+    
 
     // Valid bid - relay with code 10
     uint8_t relay_msg[11];
@@ -127,6 +128,7 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
         current_bidder = bidder_id;
         // Reset the auction timer
         reset_auction_timer();   
+        p.encheres[p.enchere_active].consensus = 1;
         return 0;
     }
     return -1;
@@ -157,7 +159,7 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
                    id, numv, prix);
             
             // If we are the supervisor, validate the bid
-            if (is_superviseur) {
+            if (p.encheres[p.enchere_active].is_superviseur == 1) {
                 validate_bid(id, numv, prix);
             }
             break;

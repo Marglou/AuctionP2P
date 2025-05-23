@@ -601,7 +601,6 @@ int gestion_reception_UDP() {
     struct sockaddr_in6 src = {0};
     socklen_t len = sizeof(src);
 
-    int nb_msg_1 = 0;
     struct valid_peer *head = NULL;
     ssize_t n = recvfrom(p.socket_udp, buf, sizeof(buf), 0,
                          (struct sockaddr*)&src, &len);
@@ -730,16 +729,17 @@ int gestion_reception_UDP() {
             printf("Message 1 reçu : ID=%u, MESS=%s \n", parsed_msg.id, parsed_msg.mess);
 
             // Mark response as received for message 1
-            printf("[UDP Response] Marking response received for message 1\n");
-            mark_response_received(&p.udp_responses, 1, parsed_msg.id);
+            //printf("[UDP Response] Marking response received for message 1\n");
+            //mark_response_received(&p.udp_responses, 1, parsed_msg.id);
             add_valid_peer(&head, parsed_msg.id, parsed_msg.lsig, parsed_msg.sig);
-            nb_msg_1++;
+            p.encheres[p.enchere_active].nb_msg_1 += 1;
         }
 
-        if (nb_msg_1 == p.encheres[enchere_supervise].nb_pairs-1) {
+        if (p.encheres[p.enchere_active].nb_msg_1 == p.encheres[p.enchere_active].nb_pairs-1) { // Attention
             printf("Consensus atteint pour le message 1.\n");
             // ENVOIE MSG 2
-            if (nb_msg_1 <= 3) {
+            if (p.encheres[p.enchere_active].nb_msg_1 <= 3) {
+
                 uint8_t msg[BUF_SIZE];
                 unsigned char *signature = NULL;
                 size_t siglen = 0;
@@ -750,7 +750,7 @@ int gestion_reception_UDP() {
                     return -1;
                 }
 
-                int msg2_len = msg_2(msg, p.id_peer, parsed_msg.mess, signature, siglen, nb_msg_1);
+                int msg2_len = msg_2(msg, p.id_peer, parsed_msg.mess, signature, siglen, p.encheres[p.enchere_active].nb_msg_1);
                 if (msg2_len < 0) {
                     fprintf(stderr, "Erreur lors de la construction du message 2.\n");
                     free(signature);
@@ -781,9 +781,11 @@ int gestion_reception_UDP() {
 
                 if (send_msg_enchere(msg, offset, p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
                     perror("sendto dans gestion reception UDP MSG 2");
+                    p.encheres[p.enchere_active].nb_msg_1 = 0;
                     return -1;
                 } else {
                     printf("Message 2 envoyé à l'enchère active.\n");
+                    p.encheres[p.enchere_active].nb_msg_1 = 0; // Attention
                 }
 
                 //si quitte enchere reinit parametre
@@ -801,8 +803,8 @@ int gestion_reception_UDP() {
     fflush(stdout);
     
     // Check and retry any pending messages (only code 1)
-    printf("[UDP Response] Checking for messages that need retrying...\n");
-    check_and_retry_messages(&p.udp_responses);
+    //printf("[UDP Response] Checking for messages that need retrying...\n");
+    //check_and_retry_messages(&p.udp_responses);
     return 0;
 }
 
@@ -988,9 +990,14 @@ void* listen_main_sockets(void* arg) {
                     continue;
                 }
                 else if (strcmp(input, "quit") == 0) {
-                    if(p.encheres[p.enchere_active].sock>0){
+                    if(p.encheres[p.enchere_active].sock>0 && p.encheres[p.enchere_active].nb_pairs > 1){
                         mettre_fin();
+                        p.enchere_active = -1;
+                        p.nb_encheres--;
                         continue;//PENSER A METTRE A JOUR ENCHERE NOMBRE ENCHERES ....
+                    } else if (p.encheres[p.enchere_active].nb_pairs == 0){
+                        // Attention refaire tout le process avec stop_thread ahahahahaah
+                        continue;
                     }
                     
                     clean_peer();
@@ -1003,6 +1010,10 @@ void* listen_main_sockets(void* arg) {
                 }
                 else if (strcmp(input, "vente") == 0) {
                     // Initier une vente
+                    if (p.encheres[p.enchere_active].is_superviseur == 1){
+                        printf("Deja superviseur d'une vente\n");
+                        continue;
+                    }
                     if (init_vente() == -1) {
                         printf("Erreur lors de l'initiation de la vente.\n");
                     }
