@@ -194,6 +194,14 @@ struct message_2 {
     uint16_t nb_validations; // nombre de validations reçues 
 };
 
+// Message code 18 - Remove absent peers
+struct message_18 {
+    uint8_t code;     // = 18
+    uint16_t id;      // ID of peer P (supervisor)
+    uint16_t nb;      // Number of absent peers
+    uint16_t ids[];   // Array of absent peer IDs
+};
+
 //--------------------------------------------------------------------------------------------------
 // Prototypes de fonctions
 int msg_4 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp);
@@ -236,6 +244,8 @@ int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_o
 int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations);
 int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg);
 
+int msg_20(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *peer_ids, uint8_t *sig_lengths, uint8_t **signatures);
+
 int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
 
 void envoyer_message(int socket, uint16_t id);
@@ -249,5 +259,8 @@ void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix);
 //                          const unsigned char *message, size_t message_len,
 //                          const unsigned char *signature);
 int get_adresse_perso_from_socket(int sock, struct in6_addr *addr);
+
+int msg_18(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *ids);
+int parse_msg_18(uint8_t *msg, size_t msg_len, struct message_18 *msg_struct);
 
 #endif // MESSAGE_H

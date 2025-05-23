@@ -36,7 +36,7 @@ int track_udp_message(struct udp_response_manager* manager, uint8_t code, uint16
     new_msg->message_len = message_len;
     new_msg->send_time = time(NULL);
     new_msg->retry_count = 0;
-    new_msg->response_received = false;
+    new_msg->completed = false;
 
 
     printf("[UDP Response] Tracking new message: code=%d, peer_id=%d, length=%zu\n", 
@@ -48,7 +48,7 @@ void mark_response_received(struct udp_response_manager* manager, uint8_t code, 
     for (int i = 0; i < manager->num_pending; i++) {
         struct udp_message_status* msg = &manager->pending_messages[i];
         if (msg->message_code == code && msg->target_peer_id == peer_id) {
-            msg->response_received = true;
+            msg->completed = true;
             printf("[UDP Response] Response received for message: code=%d, peer_id=%d\n", code, peer_id);
             return;
         }
@@ -59,46 +59,60 @@ void mark_response_received(struct udp_response_manager* manager, uint8_t code, 
 
 void check_and_retry_messages(struct udp_response_manager* manager) {
     time_t current_time = time(NULL);
-    
+    uint16_t absent_peers[MAX_PEERS];
+    uint16_t num_absent = 0;
+
     for (int i = 0; i < manager->num_pending; i++) {
         struct udp_message_status* msg = &manager->pending_messages[i];
         
-        // Skip if response already received
-        if (msg->response_received) {
+        // Skip completed messages
+        if (msg->completed) continue;
+        
+        // Check if max retries reached
+        if (msg->retry_count >= MAX_RETRIES) {
+            // Add to absent peers list if not already present
+            bool already_listed = false;
+            for (int j = 0; j < num_absent; j++) {
+                if (absent_peers[j] == msg->target_peer_id) {
+                    already_listed = true;
+                    break;
+                }
+            }
+            if (!already_listed && num_absent < MAX_PEERS) {
+                absent_peers[num_absent++] = msg->target_peer_id;
+            }
             continue;
         }
-
-        // Check if we need to retry
-        if (current_time - msg->send_time >= RETRY_TIMEOUT_SEC) {
-            if (msg->retry_count < MAX_RETRIES) {
-                printf("[UDP Response] Retrying message: code=%d, peer_id=%d, attempt=%d/%d\n",
-                       msg->message_code, msg->target_peer_id, msg->retry_count + 1, MAX_RETRIES);
-                
-                struct sockaddr_in6 peer_addr = {0};
-                peer_addr.sin6_family = AF_INET6;
-                peer_addr.sin6_port = htons(p.discovered_peers[msg->target_peer_id].port_tcp);
-                memcpy(&peer_addr.sin6_addr, &p.discovered_peers[msg->target_peer_id].ip, sizeof(struct in6_addr));
-                peer_addr.sin6_scope_id = p.global_iface_index;
-
-                if (sendto(p.socket_udp, msg->message_data, msg->message_len, 0,
-                          (struct sockaddr*)&peer_addr,
-                          sizeof(struct sockaddr_in6)) < 0) {
-                    perror("Error retrying UDP message");
-                    continue;
-                }
-                
-                msg->retry_count++;
-                msg->send_time = current_time;
-                printf("Retrying message code %d to peer %d (attempt %d/%d)\n",
-                       msg->message_code, msg->target_peer_id,
-                       msg->retry_count, MAX_RETRIES);
+        
+        // Check if it's time to retry
+        if (current_time - msg->last_sent_time >= RETRY_TIMEOUT_SEC) {
+            // Retry sending the message
+            struct sockaddr_in6 peer_addr = {0};
+            peer_addr.sin6_family = AF_INET6;
+            peer_addr.sin6_port = htons(p.port_perso);
+            memcpy(&peer_addr.sin6_addr, &p.discovered_peers[msg->target_peer_id].ip, sizeof(struct in6_addr));
+            
+            if (sendto(p.socket_udp, msg->message_data, msg->message_len, 0,
+                      (struct sockaddr*)&peer_addr,
+                      sizeof(struct sockaddr_in6)) < 0) {
+                perror("sendto in check_and_retry_messages");
             } else {
-                // Max retries reached, remove the message
-                printf("Max retries reached for message code %d to peer %d\n",
-                       msg->message_code, msg->target_peer_id);
-                remove_completed_message(manager, msg->message_code, msg->target_peer_id);
-                i--; // Adjust index since we removed an element
+                msg->last_sent_time = current_time;
+                msg->retry_count++;
+                printf("[UDP Response] Retried message: code=%d, peer_id=%d, retry=%d\n",
+                       msg->message_code, msg->target_peer_id, msg->retry_count);
             }
+        }
+    }
+
+    // Handle absent peers if any
+    if (num_absent > 0) {
+        printf("[UDP Response] Detected %d absent peers, initiating removal process\n", num_absent);
+        handle_peer_disappearance(absent_peers, num_absent);
+        
+        // Remove completed messages for absent peers
+        for (int i = 0; i < num_absent; i++) {
+            remove_completed_message(manager, 1, absent_peers[i]);
         }
     }
 }

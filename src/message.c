@@ -1131,3 +1131,100 @@ int parse_msg_12(uint8_t *msg, size_t msg_len, FinalizationMessage *msg_struct) 
     
     return 0;
 }
+
+int msg_18(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *ids) {
+    if (!msg || !ids) return -1;
+    
+    // Set message code
+    msg[0] = 18;
+    
+    // Set ID (network byte order)
+    uint16_t id_net = htons(id);
+    memcpy(msg + 1, &id_net, sizeof(uint16_t));
+    
+    // Set number of absent peers (network byte order)
+    uint16_t nb_net = htons(nb);
+    memcpy(msg + 3, &nb_net, sizeof(uint16_t));
+    
+    // Copy peer IDs (network byte order)
+    for (int i = 0; i < nb; i++) {
+        uint16_t id_net = htons(ids[i]);
+        memcpy(msg + 5 + (i * sizeof(uint16_t)), &id_net, sizeof(uint16_t));
+    }
+    
+    return 5 + (nb * sizeof(uint16_t)); // Total message length
+}
+
+int parse_msg_18(uint8_t *msg, size_t msg_len, struct message_18 *msg_struct) {
+    if (!msg || !msg_struct || msg_len < 5) return -1;
+    
+    // Verify message code
+    if (msg[0] != 18) return -1;
+    
+    // Parse ID
+    memcpy(&msg_struct->id, msg + 1, sizeof(uint16_t));
+    msg_struct->id = ntohs(msg_struct->id);
+    
+    // Parse number of absent peers
+    memcpy(&msg_struct->nb, msg + 3, sizeof(uint16_t));
+    msg_struct->nb = ntohs(msg_struct->nb);
+    
+    // Verify message length
+    size_t expected_len = 5 + (msg_struct->nb * sizeof(uint16_t));
+    if (msg_len < expected_len) return -1;
+    
+    // Allocate new structure with flexible array
+    struct message_18 *new_struct = malloc(sizeof(struct message_18) + msg_struct->nb * sizeof(uint16_t));
+    if (!new_struct) return -1;
+    
+    // Copy existing fields
+    new_struct->code = msg_struct->code;
+    new_struct->id = msg_struct->id;
+    new_struct->nb = msg_struct->nb;
+    
+    // Parse peer IDs
+    for (int i = 0; i < msg_struct->nb; i++) {
+        memcpy(&new_struct->ids[i], msg + 5 + (i * sizeof(uint16_t)), sizeof(uint16_t));
+        new_struct->ids[i] = ntohs(new_struct->ids[i]);
+    }
+    
+    // Replace original structure
+    memcpy(msg_struct, new_struct, sizeof(struct message_18) + msg_struct->nb * sizeof(uint16_t));
+    free(new_struct);
+    
+    return 0;
+}
+
+int msg_20(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *peer_ids, uint8_t *sig_lengths, uint8_t **signatures) {
+    int offset = 0;
+    
+    // Message code (20)
+    msg[offset++] = 20;
+    
+    // ID (2 bytes)
+    uint16_t id_net = htons(id);
+    memcpy(msg + offset, &id_net, sizeof(uint16_t));
+    offset += sizeof(uint16_t);
+    
+    // Number of signatures (2 bytes)
+    uint16_t nb_net = htons(nb);
+    memcpy(msg + offset, &nb_net, sizeof(uint16_t));
+    offset += sizeof(uint16_t);
+    
+    // Concatenate peer IDs, signature lengths and signatures
+    for (int i = 0; i < nb; i++) {
+        // Peer ID (2 bytes)
+        uint16_t peer_id_net = htons(peer_ids[i]);
+        memcpy(msg + offset, &peer_id_net, sizeof(uint16_t));
+        offset += sizeof(uint16_t);
+        
+        // Signature length (1 byte)
+        msg[offset++] = sig_lengths[i];
+        
+        // Signature
+        memcpy(msg + offset, signatures[i], sig_lengths[i]);
+        offset += sig_lengths[i];
+    }
+    
+    return offset;
+}

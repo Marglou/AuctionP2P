@@ -12,16 +12,17 @@
 
 // Structure to track UDP message status
 struct udp_message_status {
-    uint8_t message_code;           // Code of the message being tracked
-    uint16_t target_peer_id;        // ID of the peer we're expecting response from
-    time_t send_time;               // When the message was sent
-    int retry_count;                // Number of retries attempted
-    bool response_received;         // Whether we received a response
-    void* message_data;             // Original message data for retransmission
-    size_t message_len;             // Length of the original message
+    uint8_t message_code;
+    uint16_t target_peer_id;
+    void* message_data;
+    size_t message_len;
+    time_t last_sent_time;
+    time_t send_time;
+    int retry_count;
+    bool completed;
 };
 
-// Structure to manage multiple pending messages
+// UDP response manager structure
 struct udp_response_manager {
     struct udp_message_status* pending_messages;
     int num_pending;

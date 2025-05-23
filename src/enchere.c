@@ -17,6 +17,7 @@
 #include "../include/connexion.h"
 #include "../include/utils.h"
 #include "../include/securite.h"
+#include "../include/udp_response.h"
 
 void afficher_enncheres() {
     printf("Liste des enchères auxquels on participe :\n");
@@ -742,4 +743,214 @@ int clean_encheres(int id_enchere) {
         }
     }
     return -1; // Pas trouvé
+}
+
+// Function to handle peer disappearance
+int handle_peer_disappearance(uint16_t *absent_peer_ids, uint16_t num_absent) {
+    // Set current peer as supervisor for this consensus
+    p.encheres[p.enchere_active].is_superviseur = 1;
+    is_superviseur = 1;
+
+    // Create message 18 to signal removal of absent peers
+    uint8_t msg_buffer[BUF_SIZE];
+    int msg_len = msg_18(msg_buffer, p.id_peer, num_absent, absent_peer_ids);
+    if (msg_len < 0) {
+        fprintf(stderr, "Error creating message 18\n");
+        return -1;
+    }
+
+    // Multicast message 18 on the auction address
+    if (send_msg_enchere(msg_buffer, msg_len, p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
+        fprintf(stderr, "Error sending message 18\n");
+        return -1;
+    }
+
+    // Wait for validation messages (code 1) from other peers
+    time_t start_time = time(NULL);
+    int nb_validations = 0;
+    struct valid_peer *head = NULL;
+    int retry_count = 0;
+    int max_retries = 2; // Total of 3 attempts (initial + 2 retries)
+    int expected_validations = p.encheres[p.enchere_active].nb_pairs - num_absent - 1; // -1 for supervisor
+
+    while (nb_validations < expected_validations) {
+        // Check timeout for validation collection
+        if (time(NULL) - start_time > RESPONSE_TIMEOUT_SEC) {
+            if (retry_count < max_retries) {
+                // Retry requesting validation from unresponsive peers
+                peer_list *peer = p.encheres[p.enchere_active].liste_participants;
+                while (peer != NULL) {
+                    bool is_absent = false;
+                    for (int i = 0; i < num_absent; i++) {
+                        if (peer->id == absent_peer_ids[i]) {
+                            is_absent = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!is_absent) {
+                        bool has_validated = false;
+                        struct valid_peer *cur = head;
+                        while (cur != NULL) {
+                            if (cur->id == peer->id) {
+                                has_validated = true;
+                                break;
+                            }
+                            cur = cur->next;
+                        }
+
+                        if (!has_validated) {
+                            // Request validation from this peer
+                            struct sockaddr_in6 peer_addr = {0};
+                            peer_addr.sin6_family = AF_INET6;
+                            peer_addr.sin6_port = htons(peer->port_tcp);
+                            memcpy(&peer_addr.sin6_addr, &peer->ip, sizeof(struct in6_addr));
+
+                            if (sendto(p.socket_udp, msg_buffer, msg_len, 0,
+                                     (struct sockaddr*)&peer_addr,
+                                     sizeof(struct sockaddr_in6)) < 0) {
+                                perror("Error requesting validation");
+                            }
+                        }
+                    }
+                    peer = peer->next;
+                }
+                retry_count++;
+                start_time = time(NULL); // Reset timer for next retry
+            } else {
+                // Max retries reached, proceed with collected validations
+                break;
+            }
+        }
+
+        // Receive and process validation messages
+        uint8_t buffer[BUF_SIZE];
+        struct sockaddr_in6 src;
+        socklen_t srclen = sizeof(src);
+        ssize_t len = recvfrom(p.socket_udp, buffer, sizeof(buffer), 0,
+                             (struct sockaddr*)&src, &srclen);
+
+        if (len > 0 && buffer[0] == 1) {
+            struct message_1 parsed_msg;
+            if (parse_msg_1(buffer, len, &parsed_msg) == 0) {
+                // Get peer's public key for signature verification
+                char peer_id_str[6];
+                snprintf(peer_id_str, sizeof(peer_id_str), "%u", parsed_msg.id);
+                EVP_PKEY *peer_pubkey = get_peer_pubkey(peer_id_str);
+                if (peer_pubkey) {
+                    if (verify_message(peer_pubkey, (unsigned char *)msg_buffer, msg_len, 
+                                     parsed_msg.sig, parsed_msg.lsig)) {
+                        add_valid_peer(&head, parsed_msg.id, parsed_msg.lsig, parsed_msg.sig);
+                        nb_validations++;
+                    }
+                    EVP_PKEY_free(peer_pubkey);
+                }
+            }
+        }
+    }
+
+    // Sign the original message as supervisor
+    unsigned char *supervisor_signature = NULL;
+    size_t supervisor_siglen = 0;
+    if (!sign(p.ed_privkey, msg_buffer, &supervisor_signature, &supervisor_siglen)) {
+        fprintf(stderr, "Error signing consensus message\n");
+        free_valid_peer_list(head);
+        return -1;
+    }
+
+    // Create and send final consensus message
+    uint8_t final_msg[BUF_SIZE];
+    int final_msg_len;
+
+    if (nb_validations <= 3) {
+        // Send single CODE=2 message with all validations
+        final_msg_len = msg_2(final_msg, p.id_peer, msg_buffer, supervisor_signature, 
+                            supervisor_siglen, nb_validations);
+        
+        // Append all validations
+        size_t offset = final_msg_len;
+        struct valid_peer *cur = head;
+        while (cur != NULL) {
+            uint16_t id_net = htons(cur->id);
+            memcpy(final_msg + offset, &id_net, sizeof(uint16_t));
+            offset += sizeof(uint16_t);
+            final_msg[offset++] = cur->lsig;
+            memcpy(final_msg + offset, cur->sig, cur->lsig);
+            offset += cur->lsig;
+            cur = cur->next;
+        }
+
+        if (send_msg_enchere(final_msg, offset, p.enchere_active, 
+                           p.encheres[p.enchere_active].sock) < 0) {
+            fprintf(stderr, "Error sending final consensus message\n");
+            free(supervisor_signature);
+            free_valid_peer_list(head);
+            return -1;
+        }
+    } else {
+        // Send initial CODE=2 with first 3 validations
+        final_msg_len = msg_2(final_msg, p.id_peer, msg_buffer, supervisor_signature, 
+                            supervisor_siglen, 3);
+        
+        // Append first 3 validations
+        size_t offset = final_msg_len;
+        struct valid_peer *cur = head;
+        for (int i = 0; i < 3 && cur != NULL; i++) {
+            uint16_t id_net = htons(cur->id);
+            memcpy(final_msg + offset, &id_net, sizeof(uint16_t));
+            offset += sizeof(uint16_t);
+            final_msg[offset++] = cur->lsig;
+            memcpy(final_msg + offset, cur->sig, cur->lsig);
+            offset += cur->lsig;
+            cur = cur->next;
+        }
+
+        if (send_msg_enchere(final_msg, offset, p.enchere_active, 
+                           p.encheres[p.enchere_active].sock) < 0) {
+            fprintf(stderr, "Error sending initial consensus message\n");
+            free(supervisor_signature);
+            free_valid_peer_list(head);
+            return -1;
+        }
+
+        // Prepare arrays for msg_20
+        uint16_t peer_ids[MAX_PEERS];
+        uint8_t sig_lengths[MAX_PEERS];
+        uint8_t *signatures[MAX_PEERS];
+        int num_validations = 0;
+
+        // Collect validation data
+        cur = head;
+        while (cur && num_validations < MAX_PEERS) {
+            peer_ids[num_validations] = cur->id;
+            sig_lengths[num_validations] = cur->lsig;
+            signatures[num_validations] = cur->sig;
+            num_validations++;
+            cur = cur->next;
+        }
+
+        // Send message 20 with all validations
+        uint8_t msg20[BUF_SIZE];
+        int msg20_len = msg_20(msg20, p.id_peer, num_validations, peer_ids, sig_lengths, signatures);
+        
+        if (send_msg_enchere(msg20, msg20_len, p.enchere_active, 
+                           p.encheres[p.enchere_active].sock) < 0) {
+            fprintf(stderr, "Error sending additional validation message\n");
+            free(supervisor_signature);
+            free_valid_peer_list(head);
+            return -1;
+        }
+    }
+
+    // Clean up
+    free(supervisor_signature);
+    free_valid_peer_list(head);
+
+    // Remove absent peers from participant list
+    for (int i = 0; i < num_absent; i++) {
+        supp_peer_list(&p.encheres[p.enchere_active].liste_participants, absent_peer_ids[i]);
+        p.encheres[p.enchere_active].nb_pairs--;
+    }
+
+    return 0;
 }
