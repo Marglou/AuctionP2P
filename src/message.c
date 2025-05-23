@@ -454,9 +454,44 @@ int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg) {
 }
 
 
-// ----------------------------------------------------------------------------------------
+// ---------------------------------------------------------CODE 16 ET 17-------------------------------
+int msg_16_17(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv) {
+    if (!msg) return -1;
+    
+    // Validate code
+    if (code != 16 && code != 17) return -1;
+    
+    msg[0] = code; // Message code 
+    
+    // ID (2 bytes, network byte order)
+    uint16_t id_net = htons(id);
+    memcpy(&msg[1], &id_net, sizeof(id_net));
+    
+    // NUMV (4 bytes, network byte order)
+    uint32_t numv_net = htonl(numv);
+    memcpy(&msg[3], &numv_net, sizeof(numv_net));
+    
+    return 7; // Total message size
+}
 
-
+int parse_msg_16_17(uint8_t *msg, size_t msg_len, struct message_16_17 *msg_struct) {
+    if (!msg || !msg_struct || msg_len < 7) return -1;
+    
+    msg_struct->code = msg[0];
+    if (msg_struct->code != 16 && msg_struct->code != 17) return -1;
+    
+    // Parse ID (2 bytes)
+    uint16_t id_net;
+    memcpy(&id_net, &msg[1], sizeof(id_net));
+    msg_struct->id = ntohs(id_net);
+    
+    // Parse NUMV (4 bytes)
+    uint32_t numv_net;
+    memcpy(&numv_net, &msg[3], sizeof(numv_net));
+    msg_struct->numv = ntohl(numv_net);
+    
+    return 0;
+}
 
 void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t numv, uint16_t *ids_disparus, uint16_t nb)
 {

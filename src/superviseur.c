@@ -51,7 +51,6 @@ void reset_auction_timer() {
 
 void check_auction_timeout() {
 
-
     time_t current_time = time(NULL);
     time_t elapsed = current_time - last_bid_time;
 

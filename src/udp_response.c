@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "../include/peer.h"
+#include "../include/enchere.h"
 
 void init_udp_response_manager(struct udp_response_manager* manager) {
     manager->pending_messages = malloc(sizeof(struct udp_message_status) * MAX_PENDING_MESSAGES);

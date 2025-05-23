@@ -992,6 +992,7 @@ void* listen_main_sockets(void* arg) {
                         mettre_fin();
                         continue;//PENSER A METTRE A JOUR ENCHERE NOMBRE ENCHERES ....
                     }
+                    
                     clean_peer();
                     printf("Quitter le programme...\n");
                     break;
@@ -1053,8 +1054,10 @@ int supp_peer_list(peer_list **h, int id) {
         return -1;
     }
 
-    peer_list *curr = h;
+    peer_list *curr = *h;
     peer_list *prev = NULL;
+
+    print_peer_list(*h);
 
     while (curr != NULL) {
         if (curr->id == id) {
@@ -1073,7 +1076,7 @@ int supp_peer_list(peer_list **h, int id) {
         prev = curr;
         curr = curr->next;
     }
-
+    print_peer_list(*h);
     printf("ID %d non trouvé dans la liste.\n", id);
     return -1;
 }

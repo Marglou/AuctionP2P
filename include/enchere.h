@@ -7,11 +7,11 @@
 #include "peer.h"
 
 // Constants
-#define MAX_ENCHERES 10
-#define MAX_PEERS 100
+//#define MAX_ENCHERES 10
+//#define MAX_PEERS 100
 #define BUF_SIZE 1024
-#define GROUP "ff02::abcd"
-#define PORT 12345
+//#define GROUP "ff02::abcd"
+//#define PORT 12345
 
 // Function declarations
 void afficher_enncheres();

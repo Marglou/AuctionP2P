@@ -202,6 +202,12 @@ struct message_18 {
     uint16_t ids[];   // Array of absent peer IDs
 };
 
+struct message_16_17 {
+    uint8_t code;     // = 8
+    uint16_t id;      // ID du pair P
+    uint32_t numv;    // Port TCP de P
+};
+
 //--------------------------------------------------------------------------------------------------
 // Prototypes de fonctions
 int msg_4 (uint8_t *msg, uint16_t id_peer, uint16_t port_tcp);
