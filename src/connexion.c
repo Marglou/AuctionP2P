@@ -45,6 +45,7 @@ int connexion_TCP (struct in6_addr ip, uint16_t port){
     dest.sin6_family = AF_INET6;
     dest.sin6_port = htons(port);  // Port is already in network byte order
     dest.sin6_addr = ip;
+
     if (IN6_IS_ADDR_LINKLOCAL(&ip)) {
         dest.sin6_scope_id = p.global_iface_index;
     }

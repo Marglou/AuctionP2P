@@ -836,7 +836,8 @@ int gestion_reception_UDP() {
                     printf("quitter enchere\n");
                     clean_encheres(p.encheres[p.enchere_active].id_enchere);
                     p.enchere_active = -1;//Attention risque de probleme, on suppose qu'il n'y avait qu'une enchere active 
-                    p.nb_encheres --;
+                    // p.nb_encheres --;
+                    is_superviseur = 0;
                 } else if (strcmp(parsed_msg.mess, "superviseur") != 0) {
                     // Envoi du message 3
                     uint8_t msg_17[7];
@@ -1016,6 +1017,9 @@ void* listen_main_sockets(void* arg) {
                 }
 
                 if (strcmp(input, "lancer") == 0) {
+                    stop_threads = 0;
+                    p.nb_encheres = 0;
+                    p.enchere_active = -1;
                     creer_enchere();
                     p.encheres[p.enchere_active].my_id = p.id_peer;
                     continue;
@@ -1059,7 +1063,8 @@ void* listen_main_sockets(void* arg) {
                         }
                         printf("je suis partieeeeee\n");
                         p.enchere_active = -1;
-                        p.nb_encheres--;
+                        // p.nb_encheres--;
+                        is_superviseur = 0;
                         continue;
                     }
                     

@@ -74,7 +74,7 @@ int join_enchere(int id, char *group, uint16_t port) {
     // Debug print the multicast address
     char addr_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &mreq.ipv6mr_multiaddr, addr_str, sizeof(addr_str));
-    // printf("Debug - Converted multicast address: %s\n", addr_str);
+    printf("Debug - Converted multicast address: %s\n", addr_str);
 
     // Verify this is a valid multicast address
     if (!IN6_IS_ADDR_MULTICAST(&mreq.ipv6mr_multiaddr)) {
@@ -86,7 +86,7 @@ int join_enchere(int id, char *group, uint16_t port) {
     // Set the interface index
     mreq.ipv6mr_interface = p.global_iface_index;
 
-    // printf("Debug - Joining multicast group %s on interface (index %d)\n", addr_str, p.global_iface_index);
+    printf("Debug - Joining multicast group %s on interface (index %d)\n", addr_str, p.global_iface_index);
 
     if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) < 0) {
         perror("setsockopt (join group enchere)");
@@ -94,6 +94,8 @@ int join_enchere(int id, char *group, uint16_t port) {
         return -1;
     }
 
+    printf("nb enchere : %d\n", p.nb_encheres);
+    printf("enchere active : %d\n", p.enchere_active);
     // Sauvegarde dans le tableau
     p.encheres[p.nb_encheres].id_enchere = id;
     p.encheres[p.nb_encheres].port_enchere = port;
@@ -123,36 +125,62 @@ int join_enchere(int id, char *group, uint16_t port) {
     group_addr.sin6_family = AF_INET6;
     group_addr.sin6_port = htons(port);
     memcpy(&group_addr.sin6_addr, &mreq.ipv6mr_multiaddr, sizeof(struct in6_addr));
-    if (IN6_IS_ADDR_LINKLOCAL(&group_addr.sin6_addr)) {
-        group_addr.sin6_scope_id = p.global_iface_index;
-    }
+    // if (IN6_IS_ADDR_LINKLOCAL(&group_addr.sin6_addr)) {
+    //     group_addr.sin6_scope_id = p.global_iface_index;
+    // }
+    p.global_iface_index = get_active_interface();
     group_addr.sin6_scope_id = p.global_iface_index;
     // Message d'acceptation
     char accept_msg[BUF_SIZE];
     snprintf(accept_msg, sizeof(accept_msg), "[ACCEPTED] Vous avez rejoint l'enchère %d\n", id);
+    
+    printf("scoe ip %d\n", p.global_iface_index);
+    char ipbuf[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &group_addr.sin6_addr, ipbuf, sizeof(ipbuf));
+    printf("sendto debug: ip=%s port=%d scope_id=%d family=%d\n",
+           ipbuf, ntohs(group_addr.sin6_port), group_addr.sin6_scope_id, group_addr.sin6_family);
     if (sendto(sock, accept_msg, strlen(accept_msg), 0, (struct sockaddr *)&group_addr, sizeof(group_addr)) < 0)
     {
         perror("sendto (accept message)");
+        printf("errno : %d\n", errno);
         close(sock);
         return -1;
     }
 
+    memcpy(&p.encheres[p.nb_encheres].group, &mreq.ipv6mr_multiaddr, sizeof(struct in6_addr));
+    char addr_sr[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, addr_sr, sizeof(addr_sr));
+    printf("Debug - Multicast group address: %s\n", addr_sr);
+
+    
+
     printf("Vous avez rejoint l'enchère %d sur %s\n", id, addr_str);
 
-    struct in6_addr adresse_perso;
-    if (get_adresse_perso_from_socket(p.socket_tcp, &adresse_perso) != 0) {
-        fprintf(stderr, "Erreur lors de la récupération de l'adresse personnelle.\n");
-        return -1;
+    struct in6_addr adresse_perso = {0};
+    if (p.socket_tcp != 0) {
+
+        // printf("socket_tcp != 0\n");
+        if (get_adresse_perso_from_socket(p.socket_tcp, &adresse_perso) != 0) {
+            fprintf(stderr, "Erreur lors de la récupération de l'adresse personnelle.\n");
+            return -1;
+        }
     }
+
 
     // Exemple de clé publique (remplacez par la clé réelle)
     unsigned char cle[113] = {0};
+
+    if (adresse_perso.s6_addr[0] == 0) {
+        adresse_perso = p.adr_perso.sin6_addr;
+    }
 
     // s'ajouter à la liste des enchères
     if (add_peer(&p.encheres[p.enchere_active].liste_participants, p.id_peer, adresse_perso, p.port_perso, cle) != 0) {
         fprintf(stderr, "Erreur lors de l'ajout de l'utilisateur en tant que peer.\n");
         return -1;
     }
+
+
     p.encheres[p.enchere_active].nb_pairs += 1; 
     p.nb_encheres++;
     return 0;
@@ -199,15 +227,13 @@ void creer_enchere()
 
     // Store the multicast address
     memcpy(&p.encheres[p.enchere_active].group, &group_addr, sizeof(struct in6_addr));
+char debug_addr[INET6_ADDRSTRLEN];
+inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, debug_addr, sizeof(debug_addr));
+printf("[DEBUG] Adresse multicast stockée : %s\n", debug_addr);
 
     // Generate a random port for the auction
     uint16_t port_enchere = generate_random_port();
     p.encheres[p.enchere_active].port_enchere = port_enchere;
-
-    // Create and send message 8 (auction initiation)
-    // uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
-    // msg[0] = 200; // CODE = 8 for auction initiation
-    // uint16_t peer_id = auction_num_id;
 
     enchere_supervise = auction_num_id;
     is_superviseur = 1; //(le superviseur)
@@ -286,7 +312,7 @@ void *auction_receiver(void *arg)
     int sock = *(int *)arg;
     free(arg); // Libère la mémoire allouée dynamiquement
 
-    char buffer[BUF_SIZE];
+    uint8_t buffer[BUF_SIZE];
     struct sockaddr_in6 src;
     socklen_t srclen = sizeof(src);
 
@@ -604,12 +630,12 @@ int init_vente () {
         return -1;
     }
 
-    printf("Enchère initiée : ID=%d, ADR=%s\n", numv, ip_str);
+    printf("Vente initiée : ID=%d, ADR=%s\n", numv, ip_str);
     is_superviseur = 1;
     enchere_supervise = p.enchere_active;
     p.encheres[p.enchere_active].numv = numv;
     init_auction_supervisor(numv, initial_price);
-    p.encheres[p.enchere_active].is_superviseur == 1;
+    p.encheres[p.enchere_active].is_superviseur = 1;
 }
 
 int sur_enchere() {
@@ -745,8 +771,14 @@ int clean_encheres(int id_enchere) {
                 // Libération de la liste des participants si allouée dynamiquement
                 free_peer_list(p.encheres[i].liste_participants);  // à implémenter si nécessaire
                 p.encheres[i].liste_participants = NULL;
-                pthread_cancel(p.encheres[i].thread_id); // Annuler le thread de l'enchère
-                pthread_join(p.encheres[i].thread_id, NULL); 
+               // Détruire mutex/cond si utilisés
+                pthread_mutex_destroy(&p.encheres[i].superviseur_mutex);
+                pthread_cond_destroy(&p.encheres[i].superviseur_cond);
+
+                if (p.encheres[i].thread_id) {
+                    pthread_cancel(p.encheres[i].thread_id);
+                    pthread_join(p.encheres[i].thread_id, NULL);
+                }
                 close(p.encheres[i].sock);
                 p.encheres[i].sock = -1;
 
@@ -754,8 +786,10 @@ int clean_encheres(int id_enchere) {
                 for (int j = i; j < p.nb_encheres - 1; j++) {
                     p.encheres[j] = p.encheres[j + 1];
                 }
+                memset(&p.encheres[p.nb_encheres - 1], 0, sizeof(EnchereSocket));
 
                 p.nb_encheres--; // Décrémenter le nombre d'enchères
+                stop_threads = 0;
                 return 0; // Succès
             }
 
