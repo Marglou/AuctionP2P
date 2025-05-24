@@ -622,7 +622,8 @@ int gestion_reception_liaison() {
     return 0;
 }
 
-int gestion_reception_UDP() {
+int gestion_reception_UDP(int *nb) {
+
     uint8_t buf[1024];
     struct sockaddr_in6 src = {0};
     socklen_t len = sizeof(src);
@@ -641,14 +642,15 @@ int gestion_reception_UDP() {
 
     buf[n] = '\0';
     // Gestion des messages avec code
-    if (buf[0] == 4 && p.num_peers >= 0 && p.join_en_cours == 0) {
+    if (buf[0] == 4 && p.num_peers >= 0 && p.nb_encheres== 0) {
+        (*nb) = -1;
         struct message_4 parsed_msg;
         if (parse_msg_4(buf, len, &parsed_msg) == 0) {
             p.discovered_peers[p.num_peers++] = (struct peer_info){
                 .id = parsed_msg.id,
                 .ip = parsed_msg.ip,
                 .port_tcp = (parsed_msg.port)};
-            p.listener_tcp.response_received = true;
+            p.listener_tcp.response_received = 1;
             p.listener_tcp.first_response_time = time(NULL);
             char ip_str[INET6_ADDRSTRLEN];
             inet_ntop(AF_INET6, &p.discovered_peers[p.num_peers - 1].ip, ip_str, sizeof(ip_str));
@@ -656,7 +658,7 @@ int gestion_reception_UDP() {
                    p.discovered_peers[p.num_peers-1].id, ip_str, p.discovered_peers[p.num_peers - 1].port_tcp);
 
             if (p.num_peers > 0) {
-                p.join_en_cours = 1;
+                //p.join_en_cours = 1;
                 struct peer_info *peer_Q = &p.discovered_peers[0];
                 char ip_str[INET6_ADDRSTRLEN];
                 inet_ntop(AF_INET6, &peer_Q->ip, ip_str, sizeof(ip_str));
@@ -671,11 +673,11 @@ int gestion_reception_UDP() {
                 //     return -1;
                 // }
                 // int socket_P = SSL_get_fd(ssl);
-                // if (socket_P < 0){
-                //     close(socket_P);
-                //     printf("Erreur connexion à Q\n");
-                //     return -1;
-                // }
+                if (socket_P < 0){
+                     close(socket_P);
+                     printf("Erreur connexion à Q\n");
+                     return -1;
+                 }
 
                 printf("Je suis ds msg_join étape 7\n");
 
@@ -790,7 +792,7 @@ int gestion_reception_UDP() {
                 size_t siglen = 0;
 
                 // Signature du message
-                if (!sign(p.ed_privkey, parsed_msg.mess, &signature, &siglen)) {
+                if (!sign(p.ed_privkey, (unsigned char *) parsed_msg.mess, &signature, &siglen)) {
                     fprintf(stderr, "Erreur lors de la signature\n");
                     return -1;
                 }
@@ -985,12 +987,35 @@ void* listen_main_sockets(void* arg) {
     // fds[3].fd = p.socket_tcp;      // TCP
     // fds[3].events = POLLIN;
 
+    int nb_msg_3 = -1;
+    time_t join_start = time(NULL);
+
     while (1) {
-        int ret = poll(fds, n, -1);  
+        int ret = poll(fds, n, 5000);  
 
         if (ret < 0) {
             perror("poll");
             break;
+        }
+
+        // Gestion du join
+        if (nb_msg_3 > 0) {
+            if (join_start == 0) join_start = time(NULL);
+
+            // Si on a attendu plus de 3 secondes sans réponse
+            if (time(NULL) - join_start > 3) {
+                nb_msg_3++;
+                if (nb_msg_3 > 4) {
+                    printf("Aucune réponse après 3 tentatives. Abandon.\n");
+                    nb_msg_3 = -1;
+                    join_start = 0;
+                    creer_enchere();
+                } else {
+                    printf("Relance tentative join (%d/3)\n", nb_msg_3);
+                    msg_join_enchere(); // renvoie le message 3
+                    join_start = time(NULL);
+                }
+            }
         }
 
         // SOCKET MULTICAST
@@ -1002,7 +1027,7 @@ void* listen_main_sockets(void* arg) {
 
         // SOCKET UNICAST UDP
         if (fds[1].revents & POLLIN) {
-            if (gestion_reception_UDP() < 0) {
+            if (gestion_reception_UDP(&nb_msg_3) < 0) {
                 fprintf(stderr, "Erreur lors de la réception du message unicast.\n");
             }
         }
@@ -1025,10 +1050,16 @@ void* listen_main_sockets(void* arg) {
                     continue;
                 }
                 else if (strcmp(input, "join") == 0) {
-                    p.join_en_cours = 0;  // Réinitialiser le flag pour rejoindre une enchère
-                    if (msg_join_enchere() == -1) {
-                        printf("Erreur lors de l'envoi de la demande de rejoindre l'enchère.\n");
+                    // p.join_en_cours = 0;  // Réinitialiser le flag pour rejoindre une enchère
+                    nb_msg_3 = 1; 
+                    join_start = 0; // Réinitialiser le timer
+                    if (nb_msg_3 > 0) {
+                        if (msg_join_enchere() == -1) {
+                            printf("Erreur lors de l'envoi de la demande de rejoindre l'enchère.\n");
+                        }
+                        nb_msg_3++;
                     }
+
                     continue;
                 }
                 else if (strncmp(input, "offre ", 6) == 0) {
@@ -1109,7 +1140,7 @@ void* listen_main_sockets(void* arg) {
                     snprintf(message, sizeof(message), "[%s] %s", p.pseudo, input);
 
                     if (p.enchere_active >= 0) {
-                        if (send_msg_enchere(message, strlen(message), p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
+                        if (send_msg_enchere((uint8_t *) message, strlen(message), p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
                             fprintf(stderr, "Erreur lors de l'envoi du message d'enchère\n");
                         }
                     } else {

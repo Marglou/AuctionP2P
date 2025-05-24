@@ -264,8 +264,8 @@ printf("[DEBUG] Adresse multicast stockée : %s\n", debug_addr);
 
 int msg_join_enchere()
 {
-    const int timeout_sec = 3;
-    const int max_attempts = 3;
+    // const int timeout_sec = 3;
+    // const int max_attempts = 3;
 
     int attempts = 0;
     time_t start = time(NULL);
@@ -283,7 +283,7 @@ int msg_join_enchere()
             fprintf(stderr, "Erreur lors de l'envoi du message de demande de jointure.\n");
             return -1;
         }
-        sleep(1);
+        // sleep(1);
     //}
 
     return 0;
@@ -614,12 +614,12 @@ int init_vente () {
         initial_price = 0;
     }
     char msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
-    if(msg_8_9_10(msg, 8,p.id_peer, numv, initial_price) != 11) {
+    if(msg_8_9_10((uint8_t *) msg, 8,p.id_peer, numv, initial_price) != 11) {
         printf("Erreur message 8");
     }
 
     // Send the message to the auction group
-    if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
+    if (send_msg_enchere((uint8_t *)msg, sizeof(msg), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
         fprintf(stderr, "Erreur lors de l'envoi du message d'initiation de vente.\n");
         return -1;
     }
@@ -917,7 +917,7 @@ int handle_peer_disappearance(uint16_t *absent_peer_ids, uint16_t num_absent) {
 
     if (nb_validations <= 3) {
         // Send single CODE=2 message with all validations
-        final_msg_len = msg_2(final_msg, p.id_peer, msg_buffer, supervisor_signature, 
+        final_msg_len = msg_2(final_msg, p.id_peer, (char *) msg_buffer, supervisor_signature, 
                             supervisor_siglen, nb_validations);
         
         // Append all validations
@@ -942,7 +942,7 @@ int handle_peer_disappearance(uint16_t *absent_peer_ids, uint16_t num_absent) {
         }
     } else {
         // Send initial CODE=2 with first 3 validations
-        final_msg_len = msg_2(final_msg, p.id_peer, msg_buffer, supervisor_signature, 
+        final_msg_len = msg_2(final_msg, p.id_peer, (char *) msg_buffer, supervisor_signature, 
                             supervisor_siglen, 3);
         
         // Append first 3 validations

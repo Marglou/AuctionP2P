@@ -98,7 +98,7 @@ typedef struct {
     int enchere_active;
     int cpt;
     struct Multicast adr_liaison;
-    int join_en_cours; // Indique si le pair est en cours de jointure
+    //int join_en_cours; // Indique si le pair est en cours de jointure
     
     // UDP response handling
     struct udp_response_manager udp_responses;
