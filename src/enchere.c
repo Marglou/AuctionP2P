@@ -242,9 +242,9 @@ void creer_enchere()
 
     // Store the multicast address
     memcpy(&p.encheres[p.enchere_active].group, &group_addr, sizeof(struct in6_addr));
-char debug_addr[INET6_ADDRSTRLEN];
-inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, debug_addr, sizeof(debug_addr));
-printf("[DEBUG] Adresse multicast stockée : %s\n", debug_addr);
+    char debug_addr[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, debug_addr, sizeof(debug_addr));
+    printf("[DEBUG] Adresse multicast stockée : %s\n", debug_addr);
 
     // Generate a random port for the auction
     uint16_t port_enchere = generate_random_port();
@@ -401,9 +401,9 @@ void *auction_receiver(void *arg)
                 if (len_msg > 0)
                 {
                     // Track the UDP message before sending
-                    /*if (track_udp_message(&p.udp_responses, 1, p.id_peer, consensus_msg, len_msg) != 0) {
+                    if (track_udp_message(&p.udp_responses, 1, p.id_peer, consensus_msg, len_msg) != 0) {
                         fprintf(stderr, "Failed to track UDP message 1\n");
-                    }*/
+                    }
                     
                     sendto(p.socket_udp, consensus_msg, len_msg, 0,
                            (struct sockaddr *)&src, srclen);

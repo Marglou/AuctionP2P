@@ -761,8 +761,8 @@ int gestion_reception_UDP(int *nb) {
             printf("Message 1 reçu : ID=%u, MESS=%s \n", parsed_msg.id, parsed_msg.mess);
 
             // Mark response as received for message 1
-            //printf("[UDP Response] Marking response received for message 1\n");
-            //mark_response_received(&p.udp_responses, 1, parsed_msg.id);
+            printf("[UDP Response] Marking response received for message 1\n");
+            mark_response_received(&p.udp_responses, 1, parsed_msg.id);
             add_valid_peer(&head, parsed_msg.id, parsed_msg.lsig, parsed_msg.sig);
             p.encheres[p.enchere_active].nb_msg_1 += 1;
         }
@@ -913,9 +913,9 @@ int gestion_reception_UDP(int *nb) {
     printf("[Unicast UDP] %s\n", buf);
     fflush(stdout);
     
-    // Check and retry any pending messages (only code 1)
-    //printf("[UDP Response] Checking for messages that need retrying...\n");
-    //check_and_retry_messages(&p.udp_responses);
+    //Check and retry any pending messages (only code 1)
+    printf("[UDP Response] Checking for messages that need retrying...\n");
+    check_and_retry_messages(&p.udp_responses);
     return 0;
 }
 
