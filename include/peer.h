@@ -7,6 +7,7 @@
 #include <openssl/evp.h>
 #include <stdbool.h>
 #include "udp_response.h"
+#include "enchere.h"
 
 #define PORT 12365
 #define GROUP "ff12::abcd"
@@ -44,26 +45,6 @@ struct Multicast {
     uint16_t port;                                // Port du groupe
 };
 
-typedef struct {
-    int sock;           // Socket de l'enchère
-    // char group[INET6_ADDRSTRLEN];  // Groupe de l'enchère
-    pthread_t thread_id; // ID du thread d'écoute
-    struct in6_addr group; // Adresse IPv6 du groupe d'enchère
-    int id_enchere;     // ID de l'enchère
-    int port_enchere; // Port de l'enchère
-    int nb_pairs; // Nombre de pairs dans l'enchère
-    int numv; // Numéro de la vente
-    struct peer_list *liste_participants; // Liste des pairs de cette enchère
-    int is_superviseur; // Indique si le pair est superviseur de l'enchère
-    int my_id;
-    int consensus;
-    int nb_msg_1;
-    pthread_t tid_consensus;
-    int superviseur_actif;  // variable de contrôle
-    pthread_mutex_t superviseur_mutex;
-    pthread_cond_t superviseur_cond;
-} EnchereSocket;
-
 
 struct tcp_listener_state {
     int socket_tcp;
@@ -80,6 +61,8 @@ typedef struct {
     EVP_PKEY *ed_privkey;
     EVP_PKEY *ed_pubkey;
     char *cert_path;
+    char *ed_pubkey_path;
+    char *ed_privkey_path;
 
     SSL_CTX *ctx;
 

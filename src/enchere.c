@@ -19,10 +19,27 @@
 #include "../include/securite.h"
 #include "../include/udp_response.h"
 
+// void afficher_enncheres() {
+//     printf("Liste des enchères auxquels on participe :\n");
+//     for (int i = 0; i < p.nb_encheres; i++) {
+//         printf("Enchère %d : ID=%d, Port=%u\n", i, p.encheres[i].id_enchere, p.encheres[i].port_enchere);
+//     }
+// }
+
 void afficher_enncheres() {
-    printf("Liste des enchères auxquels on participe :\n");
+    printf("Liste des enchères auxquelles on participe :\n");
     for (int i = 0; i < p.nb_encheres; i++) {
         printf("Enchère %d : ID=%d, Port=%u\n", i, p.encheres[i].id_enchere, p.encheres[i].port_enchere);
+        // Afficher les ventes associées à cette enchère
+        Vente *v = p.encheres[i].ventes;
+        if (!v) {
+            printf("   (Aucune vente en cours)\n");
+        } else {
+            while (v) {
+                printf("   - Vente numv=%d, prix courant=%u, gagnant=%u\n", v->numv, v->prix_courant, v->id_gagnant);
+                v = v->next;
+            }
+        }
     }
 }
 
@@ -59,7 +76,7 @@ int join_enchere(int id, char *group, uint16_t port) {
         close(sock);
         return -1;
     }
-
+    p.global_iface_index = get_active_interface();
     // Abonnement au groupe multicast
     struct ipv6_mreq mreq = {0};
     
@@ -87,7 +104,6 @@ int join_enchere(int id, char *group, uint16_t port) {
     mreq.ipv6mr_interface = p.global_iface_index;
 
     printf("Debug - Joining multicast group %s on interface (index %d)\n", addr_str, p.global_iface_index);
-
     if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) < 0) {
         perror("setsockopt (join group enchere)");
         close(sock);
@@ -128,7 +144,7 @@ int join_enchere(int id, char *group, uint16_t port) {
     // if (IN6_IS_ADDR_LINKLOCAL(&group_addr.sin6_addr)) {
     //     group_addr.sin6_scope_id = p.global_iface_index;
     // }
-    p.global_iface_index = get_active_interface();
+
     group_addr.sin6_scope_id = p.global_iface_index;
     // Message d'acceptation
     char accept_msg[BUF_SIZE];
@@ -152,23 +168,23 @@ int join_enchere(int id, char *group, uint16_t port) {
     inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, addr_sr, sizeof(addr_sr));
     printf("Debug - Multicast group address: %s\n", addr_sr);
 
-    
-
     printf("Vous avez rejoint l'enchère %d sur %s\n", id, addr_str);
 
     struct in6_addr adresse_perso = {0};
     if (p.socket_tcp != 0) {
 
-        // printf("socket_tcp != 0\n");
         if (get_adresse_perso_from_socket(p.socket_tcp, &adresse_perso) != 0) {
             fprintf(stderr, "Erreur lors de la récupération de l'adresse personnelle.\n");
             return -1;
         }
     }
 
-
-    // Exemple de clé publique (remplacez par la clé réelle)
     unsigned char cle[113] = {0};
+    if (lire_cle_publique_pem(p.ed_pubkey_path, cle) != 0) {
+        fprintf(stderr, "Erreur lors de la lecture de la clé publique\n");
+        close(sock);
+        return -1;
+    }
 
     if (adresse_perso.s6_addr[0] == 0) {
         adresse_perso = p.adr_perso.sin6_addr;
@@ -179,7 +195,6 @@ int join_enchere(int id, char *group, uint16_t port) {
         fprintf(stderr, "Erreur lors de l'ajout de l'utilisateur en tant que peer.\n");
         return -1;
     }
-
 
     p.encheres[p.enchere_active].nb_pairs += 1; 
     p.nb_encheres++;
@@ -630,12 +645,20 @@ int init_vente () {
         return -1;
     }
 
+    //  Vente
+    Vente *v = ajouter_vente(&p.encheres[p.enchere_active], numv, initial_price, 0);
+    if (!v) {
+        printf("Erreur d'allocation de la vente.\n");
+        return -1;
+    } 
+    // 
     printf("Vente initiée : ID=%d, ADR=%s\n", numv, ip_str);
     is_superviseur = 1;
     enchere_supervise = p.enchere_active;
     p.encheres[p.enchere_active].numv = numv;
     init_auction_supervisor(numv, initial_price);
     p.encheres[p.enchere_active].is_superviseur = 1;
+    return 0;
 }
 
 int sur_enchere() {
@@ -787,7 +810,8 @@ int clean_encheres(int id_enchere) {
                     p.encheres[j] = p.encheres[j + 1];
                 }
                 memset(&p.encheres[p.nb_encheres - 1], 0, sizeof(EnchereSocket));
-
+                free_ventes(p.encheres[i].ventes);
+                p.encheres[i].ventes = NULL;
                 p.nb_encheres--; // Décrémenter le nombre d'enchères
                 stop_threads = 0;
                 return 0; // Succès
@@ -1004,6 +1028,54 @@ int handle_peer_disappearance(uint16_t *absent_peer_ids, uint16_t num_absent) {
         supp_peer_list(&p.encheres[p.enchere_active].liste_participants, absent_peer_ids[i]);
         p.encheres[p.enchere_active].nb_pairs--;
     }
-
     return 0;
+}
+
+// ----------------------------------------------------------------------------
+
+// Ajouter une vente en tête de liste
+Vente* ajouter_vente(EnchereSocket *enchere, int numv, uint32_t prix_courant, uint16_t id_gagnant) {
+    Vente *nouvelle = malloc(sizeof(Vente));
+    if (!nouvelle) return NULL;
+    nouvelle->numv = numv;
+    nouvelle->prix_courant = prix_courant;
+    nouvelle->id_gagnant = id_gagnant;
+    nouvelle->next = enchere->ventes;
+    enchere->ventes = nouvelle;
+    return nouvelle;
+}
+
+// Supprimer une vente selon le numv
+int supprimer_vente(EnchereSocket *enchere, int numv) {
+    Vente *prev = NULL, *cur = enchere->ventes;
+    while (cur) {
+        if (cur->numv == numv) {
+            if (prev) prev->next = cur->next;
+            else enchere->ventes = cur->next;
+            free(cur);
+            return 0; // succès
+        }
+        prev = cur;
+        cur = cur->next;
+    }
+    return -1; // non trouvé
+}
+
+// Rechercher une vente selon le numv
+Vente* rechercher_vente(EnchereSocket *enchere, int numv) {
+    Vente *cur = enchere->ventes;
+    while (cur) {
+        if (cur->numv == numv) return cur;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+void free_ventes(Vente *ventes) {
+    Vente *cur = ventes;
+    while (cur) {
+        Vente *tmp = cur;
+        cur = cur->next;
+        free(tmp);
+    }
 }

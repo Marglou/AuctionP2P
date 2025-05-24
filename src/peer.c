@@ -99,6 +99,9 @@ void peer_start(const char *nom) {
     char ed_pub[256], ed_priv[256];
     snprintf(ed_pub, sizeof(ed_pub), "%s_ed_pubKey.pem", p.pseudo);
     snprintf(ed_priv, sizeof(ed_priv), "%s_ed_privKey.pem", p.pseudo);
+
+    p.ed_pubkey_path = strdup(ed_pub);
+    p.ed_privkey_path = strdup(ed_priv);
      // Générer et enregistrer les clés ED25519
     if (generate_ed25519_key(ed_pub, ed_priv)) {
         p.ed_privkey = convert_private_key_to_evp_pkey(ed_priv);
@@ -673,11 +676,11 @@ int gestion_reception_UDP(int *nb) {
                 //     return -1;
                 // }
                 // int socket_P = SSL_get_fd(ssl);
-                if (socket_P < 0){
-                     close(socket_P);
-                     printf("Erreur connexion à Q\n");
-                     return -1;
-                 }
+                // if (socket_P < 0){
+                //      close(socket_P);
+                //      printf("Erreur connexion à Q\n");
+                //      return -1;
+                //  }
 
                 printf("Je suis ds msg_join étape 7\n");
 
@@ -1083,10 +1086,10 @@ void* listen_main_sockets(void* arg) {
                     continue;
                 }
                 else if (strcmp(input, "quit") == 0) {
-                    if(p.encheres[p.enchere_active].sock>0 && p.encheres[p.enchere_active].nb_pairs > 1){
+                    if(p.enchere_active >= 0 && p.encheres[p.enchere_active].sock>0 && p.encheres[p.enchere_active].nb_pairs > 1){
                         mettre_fin();
                         continue;//PENSER A METTRE A JOUR ENCHERE NOMBRE ENCHERES ....
-                    } else if (p.encheres[p.enchere_active].nb_pairs == 1){
+                    } else if ( p.enchere_active >= 0 && p.encheres[p.enchere_active].nb_pairs == 1){
                         // Attention refaire tout le process avec stop_thread ahahahahaah
                         if (clean_encheres(p.encheres[p.enchere_active].id_enchere) != 0 ){
                             printf("Erreur qd on veut partir\n");
@@ -1129,6 +1132,17 @@ void* listen_main_sockets(void* arg) {
                         printf("Erreur lors de la surenchère.\n");
                     }
                     printf("Surenchère effectuée.\n");
+                    continue;
+                }
+                else if (strncmp(input, "switch ", 7) == 0) {
+                    int idx = atoi(input + 7);
+                    if (idx >= 0 && idx < p.nb_encheres) {
+                        afficher_enncheres();
+                        p.enchere_active = idx;
+                        printf("Enchère active changée : %d (ID=%d)\n", idx, p.encheres[idx].id_enchere);
+                    } else {
+                        printf("Indice d'enchère invalide.\n");
+                    }
                     continue;
                 }
                 else {
@@ -1190,8 +1204,6 @@ int supp_peer_list(peer_list **h, int id) {
     printf("ID %d non trouvé dans la liste.\n", id);
     return -1;
 }
-
-// -------------------  ------------------------------------------
 
 void clean_peer() {
     printf("Nettoyage du pair...\n");
@@ -1266,12 +1278,20 @@ void clean_peer() {
         p.cert_path = NULL;
     }
 
+    if (p.ed_privkey_path) {
+        free(p.ed_privkey_path);
+        p.ed_privkey_path = NULL;
+    }
+
+    if (p.ed_pubkey_path) {
+        free(p.ed_pubkey_path);
+        p.ed_pubkey_path = NULL;
+    }
+
     // Clean up UDP response manager
     cleanup_udp_response_manager(&p.udp_responses);
     printf("Peer nettoyé proprement.\n");
 }
-
-
 
 // Function to connect to all other peers and send message 6
 int connect_to_peers_and_send_info(peer_list *h, uint16_t new_peer_id, struct in6_addr new_peer_ip, 
@@ -1418,6 +1438,23 @@ int connect_to_peers_and_send_info(peer_list *h, uint16_t new_peer_id, struct in
 
 
 int add_peer(peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
+
+    if (id < 0 ) {
+        fprintf(stderr, "ID invalide : %d\n", id);
+        return -1;
+    }
+
+    if (port < 0 || port > 65535) {
+        fprintf(stderr, "Port invalide : %d\n", port);
+        return -1;
+    }
+
+    char ip_str[INET6_ADDRSTRLEN];
+    if (inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str)) == NULL) {
+        perror("inet_ntop");
+        return -1;
+    }
+
     peer_list *new_peer = malloc(sizeof(peer_list));
     if (!new_peer) {
         perror("Erreur d'allocation mémoire pour le peer");
@@ -1427,12 +1464,6 @@ int add_peer(peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, u
     new_peer->id = id;
     new_peer->ip = ip;
 
-    char ip_str[INET6_ADDRSTRLEN];
-    if (inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str)) == NULL) {
-        perror("inet_ntop");
-        free(new_peer);
-        return -1;
-    }
     printf("Ajout peer IP %s\n", ip_str);
 
     new_peer->port_tcp = port;

@@ -132,17 +132,15 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
     // Send message 5
     uint8_t msg[1 + 2 + 16 + 2 + 113];  // CODE + ID + IP + PORT + CLE
     unsigned char CLE[113];
-    // if (format_ed25519_public_key(cle, my_pubkey) != 0) {
-    //     printf("Erreur lors du formatage de la clé publique.\n");
-    //     // SSL_free(ssl);
-    //     // SSL_CTX_free(ctx);
-    //     close(socket_tcp_client);
-    //     return -1;
-    // }
-
-    if (generate_ed25519_keypair_and_extract_CLE("key.pem", CLE) == 0) {
-        // printf("CLE (113 octets) :\n%s\n", CLE);
+    if (lire_cle_publique_pem(p.ed_pubkey_path, CLE) != 0) {
+        fprintf(stderr, "Erreur lors de la lecture de la clé publique\n");
     }
+
+    printf("cle : %s\n", CLE);
+
+    // if (generate_ed25519_keypair_and_extract_CLE("key.pem", CLE) == 0) {
+    //     // printf("CLE (113 octets) :\n%s\n", CLE);
+    // }
 
     uint16_t peer_id = (uint16_t)p.id_peer;
 

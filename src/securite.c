@@ -70,6 +70,30 @@ EVP_PKEY *convert_private_key_to_evp_pkey(char *privkey) {
 	return pkey; 
 }
 
+int lire_cle_publique_pem(const char *chemin, unsigned char cle[113]) {
+    FILE *f = fopen(chemin, "r");
+    if (!f) {
+        perror("fopen");
+        return -1;
+    }
+    size_t offset = 0;
+    char ligne[128];
+    while (fgets(ligne, sizeof(ligne), f)) {
+        size_t len = strlen(ligne);
+        // Copie chaque ligne dans cle (y compris \n)
+        if (offset + len > 113) len = 113 - offset;
+        memcpy(cle + offset, ligne, len);
+        offset += len;
+        if (offset >= 113) break;
+    }
+    fclose(f);
+    if (offset != 113) {
+        fprintf(stderr, "Erreur : la clé ne fait pas 113 octets (lu %zu)\n", offset);
+        return -1;
+    }
+    return 0;
+}
+
 
 /* Génère une paire de clés ED25519 */
 int generate_ed25519_key(char* public_key_name, char* private_key_name){

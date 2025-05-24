@@ -259,7 +259,6 @@ int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg);
 
 int msg_20(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *peer_ids, uint8_t *sig_lengths, uint8_t **signatures);
 
-int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey);
 
 void envoyer_message(int socket, uint16_t id);
 void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix);

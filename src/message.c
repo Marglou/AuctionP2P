@@ -477,8 +477,6 @@ int msg_30(uint8_t *buf, uint32_t numv, char *mess) {
     return 6 + lmess; // taille totale du message
 }
 
-
-
 int parse_msg_30(uint8_t *msg, size_t len, struct message_30 *out) {
     if (len < 6) return -1; // CODE(1) + NUMV(4) + LMESS(1) = 6 octets mini
 
@@ -620,51 +618,6 @@ void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix)
     send(socket, &msg, sizeof(msg), 0);
 }
 
-// Format ED25519 public key with header and trailer texts
-int format_ed25519_public_key(unsigned char *cle, EVP_PKEY *pubkey)
-{
-    // Header text: "-----BEGIN PUBLIC KEY-----\n"
-    const char *header = "-----BEGIN PUBLIC KEY-----\n";
-    memcpy(cle, header, strlen(header));
-    size_t offset = strlen(header);
-
-    // Get raw public key bytes
-    unsigned char raw_key[32];
-    size_t raw_len = sizeof(raw_key);
-    if (EVP_PKEY_get_raw_public_key(pubkey, raw_key, &raw_len) != 1)
-    {
-        fprintf(stderr, "Error getting raw public key\n");
-        return -1;
-    }
-
-    // Base64 encode the raw key
-    char base64_key[45];
-    int base64_len = EVP_EncodeBlock((unsigned char *)base64_key, raw_key, raw_len);
-    if (base64_len < 0)
-    {
-        fprintf(stderr, "Error base64 encoding public key\n");
-        return -1;
-    }
-
-    // Copy base64 encoded key
-    memcpy(cle + offset, base64_key, base64_len);
-    offset += base64_len;
-
-    // Trailer text: "\n-----END PUBLIC KEY-----\n"
-    const char *trailer = "\n-----END PUBLIC KEY-----\n";
-    memcpy(cle + offset, trailer, strlen(trailer));
-    offset += strlen(trailer);
-
-    // Ensure we have exactly 113 bytes
-    if (offset != 113)
-    {
-        fprintf(stderr, "Error: formatted key length is %zu, expected 113\n", offset);
-        return -1;
-    }
-
-    return 0;
-}
-
 // --------------------------- CODE 6 -----------------------------------------------
 int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp, unsigned char *cle)
 {
@@ -717,7 +670,6 @@ int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct)
 }
 
 // --------------------------- CODE 7 -----------------------------------------------
-
 int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pairs) {
     if (!buffer || buffer_size < 22) {
         fprintf(stderr, "Buffer too small for message 7 (need at least 22 bytes, got %zu)\n", buffer_size);
@@ -887,8 +839,8 @@ int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
     size_t total_received = 0;
 
     // Lire les données jusqu'à ce que 23 octets soient reçus
-    // while (total_received < 23) {
-        ssize_t received = recv(socket, buffer + total_received, 23 - total_received, 0);
+    while (total_received < 23) {
+    ssize_t received = recv(socket, buffer + total_received, 23 - total_received, 0);
     // ssize_t received = SSL_read(socket, buffer + total_received, sizeof(buffer) - total_received);
         if (received < 0) {
             perror("Erreur lors de la réception des données TCP");
@@ -898,8 +850,8 @@ int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
     //     //     fprintf(stderr, "Connexion fermée par le pair avant réception complète.\n");
     //     //     return -1;
     //     // }
-    //     total_received += received;
-    // }
+        total_received += received;
+    }
 
     printf("Debug - Total reçu : %zu octets\n", total_received);
 

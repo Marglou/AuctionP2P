@@ -20,7 +20,7 @@ int generate_ed25519_keypair_and_extract_CLE(const char *key_path, unsigned char
 int generer_certificat_autosigne(const char *keyfile, const char *certfile, const char *common_name);
 
 void init_openssl();
-
+int lire_cle_publique_pem(const char *chemin, unsigned char cle[113]);
 EVP_PKEY *convert_public_key_to_evp_pkey(char *pubkey);
 EVP_PKEY *convert_private_key_to_evp_pkey(char *privkey);
 int generate_ed25519_key(char* public_key_name, char* private_key_name);
