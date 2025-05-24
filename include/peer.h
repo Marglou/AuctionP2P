@@ -56,6 +56,8 @@ struct tcp_listener_state {
 typedef struct {
     int id_peer;
     char *pseudo;
+    int compte;
+    pthread_mutex_t compte_mutex; // Mutex pour protéger le compte
     uint16_t port_perso;
     struct sockaddr_in6 adr_perso;
     EVP_PKEY *ed_privkey;
@@ -81,7 +83,6 @@ typedef struct {
     int enchere_active;
     int cpt;
     struct Multicast adr_liaison;
-    //int join_en_cours; // Indique si le pair est en cours de jointure
     
     // UDP response handling
     struct udp_response_manager udp_responses;
@@ -123,7 +124,9 @@ int connect_to_peers_and_send_info(peer_list *p, uint16_t new_peer_id, struct in
                                   uint16_t new_peer_port, unsigned char *new_peer_cle);
 int supp_peer_list(peer_list **h, int id);
 
-
+void incrementer_compte(int montant);
+int decrementer_compte(int montant);
+int lire_compte();
 
 #endif // PEER_H
  

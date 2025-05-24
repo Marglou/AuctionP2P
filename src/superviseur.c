@@ -21,10 +21,11 @@
 uint32_t current_price = 0;
 uint32_t current_numv = 0;
 uint16_t current_bidder = 0;
+int count_offre = 0;
 
 // Timer variables for auction finalization
-#define INACTIVITY_TIMEOUT 3  // 30 seconds of inactivity before warning
-#define FINALIZATION_TIMEOUT 3  // 30 seconds after warning before finalization
+#define INACTIVITY_TIMEOUT 8  // 30 seconds of inactivity before warning
+#define FINALIZATION_TIMEOUT 10  // 30 seconds after warning before finalization
 time_t last_bid_time = 0;
 int warning_sent = 0;
 
@@ -34,6 +35,7 @@ void init_auction_supervisor(uint32_t numv, uint32_t prix) {
     current_price = prix;
     current_numv = numv;
     current_bidder = 0;
+    count_offre = 0;
 }
 
 void cleanup_auction_supervisor() {
@@ -42,11 +44,12 @@ void cleanup_auction_supervisor() {
     current_price = 0;
     current_numv = 0;
     current_bidder = 0;
+    count_offre = 0;
 }
 
 void reset_auction_timer() {
     last_bid_time = time(NULL);
-    warning_sent = 0;
+   // warning_sent = 0;
 }
 
 void check_auction_timeout() {
@@ -57,23 +60,23 @@ void check_auction_timeout() {
     // If no warning sent and timeout reached, send warning
     // if (!warning_sent && elapsed >= INACTIVITY_TIMEOUT) {
     if (warning_sent==0){
-        printf("i'm here\n");
         uint8_t warning_msg[11];
         if (msg_11(warning_msg, p.id_peer, current_numv, current_price) == 11) {
             send_msg_enchere(warning_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
             printf("[Superviseur] Envoi de l'avertissement de finalisation\n");
             warning_sent = 1;
+            printf("chieur a %d\n",warning_sent);
             return;
         }
     }
     // If warning was sent and final timeout reached, finalize auction
     // else if (warning_sent && elapsed >= (INACTIVITY_TIMEOUT + FINALIZATION_TIMEOUT)) {
-    else if (warning_sent) {
+    else if (warning_sent == 1) {
         uint8_t final_msg[12];
         if (msg_12(final_msg, current_bidder, current_numv, current_price) == 11) {
             send_msg_enchere(final_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
-            printf("[Superviseur] Finalisation de l'enchère - Gagnant: pair %u, Prix: %u\n", 
-                   current_bidder, current_price);
+            printf("[Superviseur] Finalisation de l'enchère - Gagnant: pair %u, Prix: %u NUMV %d\n", 
+                   current_bidder, current_price, current_numv);
             
             // Clean up supervisor state
             cleanup_auction_supervisor();
@@ -84,7 +87,6 @@ void check_auction_timeout() {
             }
            
         } 
-        //return;
     }
 }
 
@@ -92,10 +94,24 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
     if (p.encheres[p.enchere_active].is_superviseur==0) {
         return -1;
     }
-    printf("JE SUIS LA consensus %d\n", p.encheres[p.enchere_active].consensus);
+    // printf("JE SUIS LA consensus %d\n", p.encheres[p.enchere_active].consensus);
+    
+    // Check if bid price is lower than current price
+    if (prix <= rechercher_vente(&p.encheres[p.enchere_active], numv)->prix_courant) {
+        // Reject low bid (code 15)
+        uint8_t reject_msg[11];
+        if (msg_14_15(reject_msg, 15, bidder_id, numv, prix) == 11) {
+            send_msg_enchere(reject_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
+            count_offre = 0;
+            printf("[Superviseur] Rejet de l'offre trop basse de pair %u\n", bidder_id);
+        }
+        return -1;
+    }
+
+    // printf("compter offre %d\n", count_offre);
     if(p.encheres[p.enchere_active].consensus==1){
             // Check if this is a competing bid
-        if (numv != p.encheres[enchere_supervise].numv) {
+        if (numv == p.encheres[enchere_supervise].numv_supervise && count_offre > 0) {
             // Reject competing bid (code 14)
             uint8_t reject_msg[11];
             if (msg_14_15(reject_msg, 14, bidder_id, numv, prix) == 11) {
@@ -105,16 +121,7 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
             return -1;
         }  
     }
-    // Check if bid price is lower than current price
-        if (prix <= current_price) {
-            // Reject low bid (code 15)
-            uint8_t reject_msg[11];
-            if (msg_14_15(reject_msg, 15, bidder_id, numv, prix) == 11) {
-                send_msg_enchere(reject_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
-                printf("[Superviseur] Rejet de l'offre trop basse de pair %u\n", bidder_id);
-            }
-            return -1;
-        }
+
     
 
     // Valid bid - relay with code 10
@@ -127,6 +134,7 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
         // Update current auction state
         current_price = prix;
         current_bidder = bidder_id;
+        count_offre++;
         // Reset the auction timer
         reset_auction_timer();   
         return 0;
@@ -135,6 +143,7 @@ int validate_bid(uint16_t bidder_id, uint32_t numv, uint32_t prix) {
 }
 
 void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
+    reset_auction_timer();
     switch (code) {
         case 8: // Auction initiation
             printf("[Enchère] Nouvelle vente initiée par pair %u: NUMV=%u, PRIX=%u\n", 
@@ -146,12 +155,21 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
             // current_bidder = id;
             
             // // Store auction info
-            p.encheres[p.enchere_active].numv = numv;
+            // p.encheres[p.enchere_active].numv = numv;
             // enchere_supervise = p.enchere_active;
             // is_superviseur = 1;
             
             // // Initialize timer
             // reset_auction_timer();
+            if (rechercher_vente(&p.encheres[p.enchere_active], numv) != NULL) {
+                // printf("Enchere deja presente\n");
+                break;
+            }
+            if (ajouter_vente(&p.encheres[p.enchere_active], numv, prix) == NULL){
+                printf("Erreur d'ajout de la vente \n");
+                break;
+            }
+            p.encheres[p.enchere_active].nb_ventes++;
             break;
             
         case 9: // Bid message
@@ -159,26 +177,23 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
                    id, numv, prix);
             
             // If we are the supervisor, validate the bid
-            if (p.encheres[p.enchere_active].is_superviseur == 1) {
+            if (p.encheres[p.enchere_active].is_superviseur == 1 && p.encheres[p.enchere_active].numv_supervise == numv) {
                 p.encheres[p.enchere_active].consensus = 1;
                 validate_bid(id, numv, prix);
+                break;
             }
+            
+            if (rechercher_vente(&p.encheres[p.enchere_active], numv) != NULL) {
+                // printf("Enchere deja presente\n");
+                break;
+            }
+
+            if (ajouter_vente(&p.encheres[p.enchere_active], numv, prix) == NULL){
+                printf("Erreur d'ajout de la vente \n");
+                break;
+            }
+            p.encheres[p.enchere_active].nb_ventes++;
             break;
-            
-        // case 10: // Relayed bid message
-            // printf("[Enchère] Offre validée de pair %u: NUMV=%u, PRIX=%u\n", 
-            //        id, numv, prix);
-            
-            // // Update current auction state
-            // current_price = prix;
-            // // current_bidder = id;
-            // printf("[ENCHERE] : message 10 recu : debut consensus \n");
-            // uint8_t consensus_msg[11];
-            // if (msg_1(consensus_msg, id, "Consensus") == 11) {
-            //     send_msg_enchere(consensus_msg, 11, p.enchere_active);
-            //     printf("[Superviseur] Envoi du message de consensus à pair %u\n", id);
-            // }
-            // break;
             
         case 14: // Rejected bid (competing)
             printf("[Enchère] Offre rejetée (concurrente) de pair %u: NUMV=%u, PRIX=%u\n", 
@@ -197,8 +212,15 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
         case 12: // Finalization message
             printf("[Enchère] Enchère finalisée code 12 - Gagnant: pair %u, Prix: %u\n", 
                    id, prix);
-            // p.encheres[p.enchere_active].is_superviseur = 0;
-            p.encheres[p.enchere_active].numv = 0;
+            if(id==p.encheres[p.enchere_active].my_id){
+                decrementer_compte(prix);
+            }else if(is_superviseur==1 && p.encheres[p.enchere_active].numv_supervise==numv){
+                incrementer_compte(prix);
+            }
+            p.encheres[p.enchere_active].numv_supervise = 0;
+            supprimer_vente(&p.encheres[p.enchere_active], numv);
+            p.encheres[p.enchere_active].nb_ventes--;
+            
             break;
     }
 }

@@ -49,7 +49,7 @@ void handle_sigint(int sig) {
 
     if (p.enchere_active >= 0 && p.encheres[p.enchere_active].is_superviseur == 1) {
         uint8_t msg_16[7];
-        if (msg_16_17(msg_16, 16, p.encheres[p.enchere_active].my_id, p.encheres[p.enchere_active].numv) != 7) {
+        if (msg_16_17(msg_16, 16, p.encheres[p.enchere_active].my_id, p.encheres[p.enchere_active].numv_supervise) != 7) {
             fprintf(stderr, "Erreur lors de la création du message de départ.\n");
         } else {
             if (send_msg_enchere(msg_16, sizeof(msg_16), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
@@ -102,27 +102,12 @@ void peer_start(const char *nom) {
 
     p.ed_pubkey_path = strdup(ed_pub);
     p.ed_privkey_path = strdup(ed_priv);
+
      // Générer et enregistrer les clés ED25519
     if (generate_ed25519_key(ed_pub, ed_priv)) {
         p.ed_privkey = convert_private_key_to_evp_pkey(ed_priv);
-        // prive pour signature 
-        /*
-        	// signature 
-        unsigned char *signature
-        if(sign(pkey, msg, &signature, &slen)){
-            printf("signature effectuée ! - longueurs : msg : %lu sign : %zu \n", strlen((char *) msg), slen);
-            printf("\n");
-        }
-            //nettoyage 
-            if(signature != NULL)
-            free(signature);
-        */
        p.ed_pubkey = convert_public_key_to_evp_pkey(ed_pub);
-        /*
-	    verify(pubkey, msg, signature, slen);
-        */
-           // Après avoir généré la clé privée "serv.key"
-        // Générer un certificat auto-signé
+
         char cert_path[256];        
         snprintf(cert_path, sizeof(cert_path), "%s_cert.pem", p.pseudo);
         p.cert_path = strdup(cert_path);
@@ -134,7 +119,6 @@ void peer_start(const char *nom) {
             fprintf(stderr, "Erreur génération certificat auto-signé\n");
             exit(1);
         }
-    //    generate_certificate_for_peer(p.pseudo, ed_pub, sizeof(ed_pub), ed_priv, sizeof(ed_priv));
         printf("Clés ED25519 générées et enregistrées avec succès.\n");
     } else {
         fprintf(stderr, "Erreur lors de la génération des clés ED25519.\n");
@@ -163,6 +147,13 @@ void peer_start(const char *nom) {
     printf("Entrez le port perso (49152-65535) : ");
     if (scanf("%hu", &p.port_perso) != 1 || p.port_perso < 49152 || p.port_perso > 65535) {
         fprintf(stderr, "Port invalide. Le port doit être entre 49152 et 65535.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Demander à l'utilisateur de saisir un montant pour le compte
+    printf("Entrez le montant initial du compte : ");
+    if (scanf("%u", &p.compte) != 1) {
+        fprintf(stderr, "Montant invalide.\n");
         exit(EXIT_FAILURE);
     }
 
@@ -302,7 +293,11 @@ void peer_start(const char *nom) {
     }
 
     // Initialize UDP response manager
-    init_udp_response_manager(&p.udp_responses);  
+    init_udp_response_manager(&p.udp_responses); 
+    if (pthread_mutex_init(&p.compte_mutex, NULL) != 0) {
+        fprintf(stderr, "Erreur lors de l'initialisation du mutex du compte.\n");
+        exit(EXIT_FAILURE);
+    }
 
     // Attendre la fin des threads
     pthread_join(p.thread_tcp, NULL);
@@ -761,7 +756,7 @@ int gestion_reception_UDP(int *nb) {
             printf("Message 1 reçu : ID=%u, MESS=%s \n", parsed_msg.id, parsed_msg.mess);
 
             // Mark response as received for message 1
-            printf("[UDP Response] Marking response received for message 1\n");
+            // printf("[UDP Response] Marking response received for message 1\n");
             mark_response_received(&p.udp_responses, 1, parsed_msg.id);
             add_valid_peer(&head, parsed_msg.id, parsed_msg.lsig, parsed_msg.sig);
             p.encheres[p.enchere_active].nb_msg_1 += 1;
@@ -788,53 +783,6 @@ int gestion_reception_UDP(int *nb) {
         if (p.encheres[p.enchere_active].nb_msg_1 == p.encheres[p.enchere_active].nb_pairs-1) { // Attention
             printf("Consensus atteint pour le message 1.\n");
             // ENVOIE MSG 2
-            // if (p.encheres[p.enchere_active].nb_msg_1 <= 3) {
-
-            //     uint8_t msg[BUF_SIZE];
-            //     unsigned char *signature = NULL;
-            //     size_t siglen = 0;
-
-            //     // Signature du message
-            //     if (!sign(p.ed_privkey, (unsigned char *) parsed_msg.mess, &signature, &siglen)) {
-            //         fprintf(stderr, "Erreur lors de la signature\n");
-            //         return -1;
-            //     }
-
-            //     int msg2_len = msg_2(msg, p.id_peer, parsed_msg.mess, signature, siglen, p.encheres[p.enchere_active].nb_msg_1);
-            //     if (msg2_len < 0) {
-            //         fprintf(stderr, "Erreur lors de la construction du message 2.\n");
-            //         free(signature);
-            //         return -1;
-            //     }
-            //     printf("\nMESSAGE 2 partie 1 OK\n");
-            //     size_t offset = msg2_len;
-
-            //     // Parcours de la liste valid_peer et concaténation dans le buffer
-            //     struct valid_peer *cur = head;
-            //     while (cur) {
-            //         // Ajout de l'id (2 octets)
-            //         uint16_t id_net = htons(cur->id);
-            //         memcpy(msg + offset, &id_net, sizeof(uint16_t));
-            //         offset += sizeof(uint16_t);
-            //         // Ajout de la longueur de la signature (1 octet)
-            //         msg[offset++] = cur->lsig;
-            //         // Ajout de la signature (lsig octets)
-            //         memcpy(msg + offset, cur->sig, cur->lsig);
-            //         offset += cur->lsig;
-            //         cur = cur->next;
-            //     }
-            //     printf("MESSAGE 2 partie 2 OK\n");
-            //     free_valid_peer_list(head);
-
-            //     if (send_msg_enchere(msg, offset, p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
-            //         perror("sendto dans gestion reception UDP MSG 2");
-            //         p.encheres[p.enchere_active].nb_msg_1 = 0;
-            //         return -1;
-            //     } else {
-            //         printf("Message 2 envoyé à l'enchère active.\n");
-            //         p.encheres[p.enchere_active].nb_msg_1 = 0; // Attention
-            //     }
-            //     p.encheres[p.enchere_active].consensus = 0;
             if (p.encheres[p.enchere_active].nb_msg_1 <= 3) {
 
                 uint8_t msg[BUF_SIZE];
@@ -884,18 +832,27 @@ int gestion_reception_UDP(int *nb) {
                 }
                 p.encheres[p.enchere_active].consensus = 0;
             
-
+                if (strncmp(parsed_msg.mess, "vente:", 6) == 0) {
+                    int numv = 0;
+                    uint32_t prix = 0;
+                    // On attend "vente:numv:prix"
+                    if (sscanf(parsed_msg.mess + 6, "%d:%u", &numv, &prix) == 2) {
+                        printf("Vente validée, numéro de vente : %d, nouveau prix : %u\n", numv, prix);
+                        update_vente(&p.encheres[p.enchere_active], numv, prix);
+                    } else {
+                        printf("Erreur lors du parsing du numéro de vente et du prix\n");
+                    }
+                }
                 //si quitte enchere reinit parametre
-                if(strcmp(parsed_msg.mess,"quitter")==0){
+                else if(strcmp(parsed_msg.mess,"quitter")==0){
                     printf("quitter enchere\n");
                     clean_encheres(p.encheres[p.enchere_active].id_enchere);
                     p.enchere_active = -1;//Attention risque de probleme, on suppose qu'il n'y avait qu'une enchere active 
-                    // p.nb_encheres --;
                     is_superviseur = 0;
                 } else if (strcmp(parsed_msg.mess, "superviseur") != 0) {
                     // Envoi du message 3
                     uint8_t msg_17[7];
-                    if (msg_16_17(msg_17, 17, p.encheres[p.enchere_active].my_id, p.encheres[p.enchere_active].numv) != 7) {
+                    if (msg_16_17(msg_17, 17, p.encheres[p.enchere_active].my_id, p.encheres[p.enchere_active].numv_supervise) != 7) {
                         fprintf(stderr, "Erreur lors de la construction du message 17.\n");
                         return -1;
                     }
@@ -914,111 +871,111 @@ int gestion_reception_UDP(int *nb) {
     fflush(stdout);
     
     //Check and retry any pending messages (only code 1)
-    printf("[UDP Response] Checking for messages that need retrying...\n");
+    // printf("[UDP Response] Checking for messages that need retrying...\n");
     check_and_retry_messages(&p.udp_responses);
     return 0;
 }
 
-int gestion_reception_TCP(int client_fd, struct tcp_listener_state* listener) {
-    printf("Gestion de la réception TCP...\n");
-    struct sockaddr_in6 client_addr = {0};
-    socklen_t addr_len = sizeof(client_addr);
+// int gestion_reception_TCP(int client_fd, struct tcp_listener_state* listener) {
+//     printf("Gestion de la réception TCP...\n");
+//     struct sockaddr_in6 client_addr = {0};
+//     socklen_t addr_len = sizeof(client_addr);
 
-    uint8_t peekbuf[1];
-    ssize_t peeklen = recv(client_fd, peekbuf, 1, MSG_PEEK);
-    if (peeklen <= 0) {
-        close(client_fd);
-        perror("recv");
-        return -1;
-    }
-    else if (peekbuf[0] == 5) {
-        // Message 5
-        uint8_t buffer[BUF_SIZE];
-        ssize_t len = recv(client_fd, buffer, BUF_SIZE, 0);
-        if (len > 0 && buffer[0] == 5)
-        {
-            struct message_5 parsed_msg;
-            if (parse_msg_5(buffer, len, &parsed_msg) == 0)
-            {
-                printf("Message 5 reçu : ID=%u, PORT=%u\n", parsed_msg.id, ntohs(parsed_msg.port));
-                listener->response_received = true;
-                listener->first_response_time = time(NULL);
+//     uint8_t peekbuf[1];
+//     ssize_t peeklen = recv(client_fd, peekbuf, 1, MSG_PEEK);
+//     if (peeklen <= 0) {
+//         close(client_fd);
+//         perror("recv");
+//         return -1;
+//     }
+//     else if (peekbuf[0] == 5) {
+//         // Message 5
+//         uint8_t buffer[BUF_SIZE];
+//         ssize_t len = recv(client_fd, buffer, BUF_SIZE, 0);
+//         if (len > 0 && buffer[0] == 5)
+//         {
+//             struct message_5 parsed_msg;
+//             if (parse_msg_5(buffer, len, &parsed_msg) == 0)
+//             {
+//                 printf("Message 5 reçu : ID=%u, PORT=%u\n", parsed_msg.id, ntohs(parsed_msg.port));
+//                 listener->response_received = true;
+//                 listener->first_response_time = time(NULL);
 
-                bool id_exists = false;
-                int count = 0, position_enr = 0;
-                for (int i = 0; i < p.num_peers; ++i)
-                {
-                    if (p.discovered_peers[i].id == parsed_msg.id)
-                        count++;
-                    if (count == 2)
-                    {
-                        id_exists = true;
-                        position_enr = i;
-                        break;
-                    }
-                }
+//                 bool id_exists = false;
+//                 int count = 0, position_enr = 0;
+//                 for (int i = 0; i < p.num_peers; ++i)
+//                 {
+//                     if (p.discovered_peers[i].id == parsed_msg.id)
+//                         count++;
+//                     if (count == 2)
+//                     {
+//                         id_exists = true;
+//                         position_enr = i;
+//                         break;
+//                     }
+//                 }
 
-                if (!id_exists && p.num_peers < MAX_PEERS)
-                {
-                    uint8_t msg[1];
-                    int msg_len = msg_50(msg);
-                    if (send(client_fd, msg, msg_len, 0) != msg_len)
-                        perror("send msg_50");
-                    else
-                        printf("Message 50 envoyé à %s:%u avec ID=%u\n",
-                                inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
-                                ntohs(parsed_msg.port), parsed_msg.id);
-                }
-                else {
-                    uint16_t new_id = rand() % 25;
-                    uint8_t msg[3];
-                    int msg_len = msg_51(msg, new_id);
-                    if (send(client_fd, msg, msg_len, 0) != msg_len) {
-                        perror("send msg_51");
-                    } else {
-                        printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",
-                                inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
-                                ntohs(parsed_msg.port), new_id);
-                        p.discovered_peers[position_enr].id = new_id;
-                    }
-                }
+//                 if (!id_exists && p.num_peers < MAX_PEERS)
+//                 {
+//                     uint8_t msg[1];
+//                     int msg_len = msg_50(msg);
+//                     if (send(client_fd, msg, msg_len, 0) != msg_len)
+//                         perror("send msg_50");
+//                     else
+//                         printf("Message 50 envoyé à %s:%u avec ID=%u\n",
+//                                 inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
+//                                 ntohs(parsed_msg.port), parsed_msg.id);
+//                 }
+//                 else {
+//                     uint16_t new_id = rand() % 25;
+//                     uint8_t msg[3];
+//                     int msg_len = msg_51(msg, new_id);
+//                     if (send(client_fd, msg, msg_len, 0) != msg_len) {
+//                         perror("send msg_51");
+//                     } else {
+//                         printf("Message 51 envoyé à %s:%u avec nouvel ID=%u\n",
+//                                 inet_ntoa(*(struct in_addr *)&parsed_msg.ip),
+//                                 ntohs(parsed_msg.port), new_id);
+//                         p.discovered_peers[position_enr].id = new_id;
+//                     }
+//                 }
 
-                // Envoi du message 7
-                uint8_t msg7_buf[BUF_SIZE];
-                int taille = message_7_header(msg7_buf, sizeof(msg7_buf), p.encheres[0]);
-                size_t total_sent = 0;
-                while (total_sent < taille)
-                {
-                    ssize_t sent = send(client_fd, msg7_buf + total_sent, taille - total_sent, 0);
-                    if (sent < 0)
-                    {
-                        perror("Erreur d'envoi du message");
-                        close(client_fd);
-                        return -1;
-                    }
-                    total_sent += sent;
-                }
+//                 // Envoi du message 7
+//                 uint8_t msg7_buf[BUF_SIZE];
+//                 int taille = message_7_header(msg7_buf, sizeof(msg7_buf), p.encheres[0]);
+//                 size_t total_sent = 0;
+//                 while (total_sent < taille)
+//                 {
+//                     ssize_t sent = send(client_fd, msg7_buf + total_sent, taille - total_sent, 0);
+//                     if (sent < 0)
+//                     {
+//                         perror("Erreur d'envoi du message");
+//                         close(client_fd);
+//                         return -1;
+//                     }
+//                     total_sent += sent;
+//                 }
 
-                printf("Message 7 header envoyé (%zu octets).\n", total_sent);
-                print_peer_list(p.encheres[0].liste_participants);
-                envoyer_infos_peers(client_fd, &p.encheres[0]);
-                close(client_fd);
-                return 0;
-            }
-        }
-    } else {
-        // Autres messages
-        char buffer[BUF_SIZE];
-        ssize_t len = recv(client_fd, buffer, sizeof(buffer), 0);
-        if (len > 0) {
-            buffer[len] = '\0';
-            printf("[TCP] %s\n", buffer);
-            fflush(stdout);
-        }
-    }
-    close(client_fd);
-    return 0;
-}
+//                 printf("Message 7 header envoyé (%zu octets).\n", total_sent);
+//                 print_peer_list(p.encheres[0].liste_participants);
+//                 envoyer_infos_peers(client_fd, &p.encheres[0]);
+//                 close(client_fd);
+//                 return 0;
+//             }
+//         }
+//     } else {
+//         // Autres messages
+//         char buffer[BUF_SIZE];
+//         ssize_t len = recv(client_fd, buffer, sizeof(buffer), 0);
+//         if (len > 0) {
+//             buffer[len] = '\0';
+//             printf("[TCP] %s\n", buffer);
+//             fflush(stdout);
+//         }
+//     }
+//     close(client_fd);
+//     return 0;
+// }
 
 
 void* listen_main_sockets(void* arg) {
@@ -1111,15 +1068,15 @@ void* listen_main_sockets(void* arg) {
                     }
                     continue;
                 }
-                else if (strncmp(input, "offre ", 6) == 0) {
-                    uint32_t prix;
-                    if (sscanf(input + 6, "%u", &prix) == 1) {
-                        faire_offre(prix);
-                    } else {
-                        printf("Format invalide. Utilisez: offre <prix>\n");
-                    }
-                    continue;
-                }
+                // else if (strncmp(input, "offre ", 6) == 0) {
+                //     uint32_t prix;
+                //     if (sscanf(input + 6, "%u", &prix) == 1) {
+                //         faire_offre(prix);
+                //     } else {
+                //         printf("Format invalide. Utilisez: offre <prix>\n");
+                //     }
+                //     continue;
+                // }
                 else if (strncmp(input, "help", 4) == 0) {
                     printf("Commandes disponibles:\n");
                     printf(" - lancer : Lancer une enchère\n");
@@ -1128,6 +1085,7 @@ void* listen_main_sockets(void* arg) {
                     printf(" - encheres : Afficher les enchères avec vente\n");
                     printf(" - vente : Initier une vente\n");
                     printf(" - offre : Surencherir\n");
+                    printf(" - solede : Affiche le compte \n");
                     printf(" - quit : Quitter le programme\n");
                     continue;
                 }
@@ -1136,14 +1094,12 @@ void* listen_main_sockets(void* arg) {
                         mettre_fin();
                         continue;//PENSER A METTRE A JOUR ENCHERE NOMBRE ENCHERES ....
                     } else if ( p.enchere_active >= 0 && p.encheres[p.enchere_active].nb_pairs == 1){
-                        // Attention refaire tout le process avec stop_thread ahahahahaah
                         if (clean_encheres(p.encheres[p.enchere_active].id_enchere) != 0 ){
                             printf("Erreur qd on veut partir\n");
                             clean_peer();
                         }
                         printf("je suis partieeeeee\n");
                         p.enchere_active = -1;
-                        // p.nb_encheres--;
                         is_superviseur = 0;
                         continue;
                     }
@@ -1162,6 +1118,10 @@ void* listen_main_sockets(void* arg) {
                         printf("Deja superviseur d'une vente\n");
                         continue;
                     }
+                    if (p.encheres[p.enchere_active].nb_pairs <= 1) {
+                        printf("Attendre d'être au moins deux\n");
+                        continue;
+                    }
                     if (init_vente() == -1) {
                         printf("Erreur lors de l'initiation de la vente.\n");
                     }
@@ -1169,8 +1129,8 @@ void* listen_main_sockets(void* arg) {
                     continue;
                 } 
                 else if (strcmp(input, "offre") == 0) {
-                    // Surencherir
-                    if (p.encheres[p.enchere_active].numv == 0) {
+                    // Surencherir Attention  pour améliorer système faire comme quand joindre enchere 
+                    if (p.encheres[p.enchere_active].nb_ventes == 0) {
                         printf("Initier une vente auparavent\n");
                         continue;
                     }
@@ -1189,6 +1149,10 @@ void* listen_main_sockets(void* arg) {
                     } else {
                         printf("Indice d'enchère invalide.\n");
                     }
+                    continue;
+                }
+                else if (strcmp(input, "solede") == 0) {
+                    printf("Solde actuel : %d\n", lire_compte());
                     continue;
                 }
                 else {
@@ -1253,9 +1217,7 @@ int supp_peer_list(peer_list **h, int id) {
 
 void clean_peer() {
     printf("Nettoyage du pair...\n");
-    // if (already_cleaned ) {
-    //     return;
-    // }
+
     // Quitter toutes les enchères (groupes multicast) et fermer les sockets
     for (int i = 0; i < p.nb_encheres; i++) {
         if (p.encheres[i].sock >= 0) {
@@ -1336,7 +1298,9 @@ void clean_peer() {
 
     // Clean up UDP response manager
     cleanup_udp_response_manager(&p.udp_responses);
-    printf("Peer nettoyé proprement.\n");
+    pthread_mutex_destroy(&p.compte_mutex);
+    printf("Vous partez avec un montant de %d euros.\n", p.compte);
+    
 }
 
 // Function to connect to all other peers and send message 6
@@ -1414,74 +1378,6 @@ int connect_to_peers_and_send_info(peer_list *h, uint16_t new_peer_id, struct in
      return ret;
 }
 
-// Function to handle a new peer connection (message 5)
-// int handle_new_peer(struct peer *p, SSL *ssl, uint8_t *msg, size_t msg_len) {
-//     struct message_5 msg_struct;
-//     if (parse_msg_5(msg, msg_len, &msg_struct) != 0) {
-//         return -1;
-//     }
-
-//     // Check if ID is already taken
-//     uint16_t assigned_id = msg_struct.id;
-//     if (find_peer_id(p, &assigned_id, false)) {
-//         // Send error response (code 51)
-//         uint8_t response[1] = {51};
-//         SSL_write(ssl, response, 1);
-//         return -1;
-//     }
-
-//     // Send success response with assigned ID (code 50)
-//     uint8_t response[3] = {50, (assigned_id >> 8) & 0xFF, assigned_id & 0xFF};
-//     SSL_write(ssl, response, 3);
-
-//     // Connect to all other peers and send the new peer's information
-//     if (connect_to_peers_and_send_info(p, assigned_id, msg_struct.ip, 
-//                                      msg_struct.port, msg_struct.cle) != 0) {
-//         return -1;
-//     }
-
-//     // Add the new peer to our list
-//     return add_peer(p, assigned_id, msg_struct.ip, msg_struct.port, msg_struct.cle);
-// }
-
-// int find_peer_id(struct peer *p, uint16_t *id, bool find_free) {
-//     if (!p || !id) return -1;
-
-//     // If we're checking if an ID is taken
-//     if (!find_free) {
-//         struct peer *current = p->next;
-//         while (current != p) {
-//             if (current->id == *id) {
-//                 return 1; // ID is taken
-//             }
-//             current = current->next;
-//         }
-//         return 0; // ID is free
-//     }
-
-//     // If we're looking for a free ID
-//     uint16_t start_id = 1;
-//     uint16_t end_id = 65535;
-    
-//     // First try the requested ID if provided
-//     if (*id != 0) {
-//         if (!find_peer_id(p, id, false)) {
-//             return 0; // Requested ID is free
-//         }
-//         start_id = *id + 1;
-//     }
-
-//     // Search for a free ID
-//     for (uint16_t test_id = start_id; test_id <= end_id; test_id++) {
-//         if (!find_peer_id(p, &test_id, false)) {
-//             *id = test_id;
-//             return 0;
-//         }
-//     }
-
-//     return -1; // No free ID found
-// }
-
 
 int add_peer(peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, unsigned char *cle) {
 
@@ -1524,4 +1420,30 @@ int add_peer(peer_list **head, uint16_t id, struct in6_addr ip, uint16_t port, u
     *head = new_peer;
 
     return 0;
+}
+
+
+void incrementer_compte(int montant) {
+    pthread_mutex_lock(&p.compte_mutex);
+    p.compte += montant;
+    pthread_mutex_unlock(&p.compte_mutex);
+}
+
+int decrementer_compte(int montant) {
+    pthread_mutex_lock(&p.compte_mutex);
+    if (p.compte < montant) {
+        pthread_mutex_unlock(&p.compte_mutex);
+        printf("Fonds insuffisants.\n");
+        return -1;
+    }
+    p.compte -= montant;
+    pthread_mutex_unlock(&p.compte_mutex);
+    return 0;
+}
+
+int lire_compte() {
+    pthread_mutex_lock(&p.compte_mutex);
+    uint32_t val = p.compte;
+    pthread_mutex_unlock(&p.compte_mutex);
+    return val;
 }

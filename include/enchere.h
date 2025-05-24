@@ -9,7 +9,7 @@
 typedef struct Vente {
     int numv; // id unique
     uint32_t prix_courant;
-    uint16_t id_gagnant;
+    // uint16_t id_gagnant;
     struct Vente *next;
 } Vente;
 
@@ -23,10 +23,11 @@ typedef struct {
     int nb_pairs; // Nombre de pairs dans l'enchère
 
     Vente *ventes; // Liste des ventes associées à l'enchère
-
-    int numv; // Numéro de la vente
+    int nb_ventes;
+    // int numv; // Numéro de la vente
 
     struct peer_list *liste_participants; // Liste des pairs de cette enchère
+
     int is_superviseur; // Indique si le pair est superviseur d'une vente
     int numv_supervise; // vente supervisé 
     int my_id;
@@ -43,7 +44,9 @@ typedef struct {
 void afficher_enncheres();
 void creer_enchere();
 int join_enchere(int id, char *group, uint16_t port);
-void faire_offre(uint32_t prix);
+// void faire_offre(uint32_t prix);
+void faire_offre_sur_vente(int numv, uint32_t prix);
+void afficher_vente(Vente *ventes);
 int msg_join_enchere();
 int init_vente();
 int sur_enchere();
@@ -52,9 +55,10 @@ void mettre_fin();
 int clean_encheres(int id_enchere);
 int handle_peer_disappearance(uint16_t *absent_peer_ids, uint16_t num_absent);
 
-Vente* ajouter_vente(EnchereSocket *enchere, int numv, uint32_t prix_courant, uint16_t id_gagnant);
+Vente* ajouter_vente(EnchereSocket *enchere, int numv, uint32_t prix_courant);
 int supprimer_vente(EnchereSocket *enchere, int numv);
 Vente* rechercher_vente(EnchereSocket *enchere, int numv);
 void free_ventes(Vente *ventes);
+void update_vente(EnchereSocket *enchere, int numv, uint32_t nouveau_prix);
 
 #endif // ENCHERE_H
