@@ -81,14 +81,9 @@ int join_enchere(int id, char *group, uint16_t port) {
         return -1;
     }
 
-    // Debug print the multicast address
-    char addr_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &mreq.ipv6mr_multiaddr, addr_str, sizeof(addr_str));
-    printf("Debug - Converted multicast address: %s\n", addr_str);
 
     // Verify this is a valid multicast address
     if (!IN6_IS_ADDR_MULTICAST(&mreq.ipv6mr_multiaddr)) {
-        fprintf(stderr, "Invalid multicast address: %s\n", addr_str);
         close(sock);
         return -1;
     }
@@ -96,15 +91,14 @@ int join_enchere(int id, char *group, uint16_t port) {
     // Set the interface index
     mreq.ipv6mr_interface = p.global_iface_index;
 
-    printf("Debug - Joining multicast group %s on interface (index %d)\n", addr_str, p.global_iface_index);
+    
     if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) < 0) {
         perror("setsockopt (join group enchere)");
         close(sock);
         return -1;
     }
 
-    // printf("nb enchere : %d\n", p.nb_encheres);
-    // printf("enchere active : %d\n", p.enchere_active);
+    
     // Sauvegarde dans le tableau
     p.encheres[p.nb_encheres].id_enchere = id;
     p.encheres[p.nb_encheres].port_enchere = port;
@@ -134,34 +128,21 @@ int join_enchere(int id, char *group, uint16_t port) {
     group_addr.sin6_family = AF_INET6;
     group_addr.sin6_port = htons(port);
     memcpy(&group_addr.sin6_addr, &mreq.ipv6mr_multiaddr, sizeof(struct in6_addr));
-    // if (IN6_IS_ADDR_LINKLOCAL(&group_addr.sin6_addr)) {
-    //     group_addr.sin6_scope_id = p.global_iface_index;
-    // }
 
     group_addr.sin6_scope_id = p.global_iface_index;
     // Message d'acceptation
     char accept_msg[BUF_SIZE];
     snprintf(accept_msg, sizeof(accept_msg), "[ACCEPTED] Vous avez rejoint l'enchère %d\n", id);
     
-    printf("scoe ip %d\n", p.global_iface_index);
-    char ipbuf[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &group_addr.sin6_addr, ipbuf, sizeof(ipbuf));
-    printf("sendto debug: ip=%s port=%d scope_id=%d family=%d\n",
-           ipbuf, ntohs(group_addr.sin6_port), group_addr.sin6_scope_id, group_addr.sin6_family);
+   
     if (sendto(sock, accept_msg, strlen(accept_msg), 0, (struct sockaddr *)&group_addr, sizeof(group_addr)) < 0)
     {
         perror("sendto (accept message)");
-        printf("errno : %d\n", errno);
         close(sock);
         return -1;
     }
 
     memcpy(&p.encheres[p.nb_encheres].group, &mreq.ipv6mr_multiaddr, sizeof(struct in6_addr));
-    char addr_sr[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, addr_sr, sizeof(addr_sr));
-    printf("Debug - Multicast group address: %s\n", addr_sr);
-
-    printf("Vous avez rejoint l'enchère %d sur %s\n", id, addr_str);
 
     struct in6_addr adresse_perso = {0};
     if (p.socket_tcp != 0) {
@@ -211,11 +192,9 @@ void creer_enchere()
 
     int auction_num_id = p.id_peer * 100 + (p.cpt + 1);
     // Generate a random multicast address in the ff15::/16 range
-    int r = rand() & 0xFFFF; // max 4 chiffres hexadécimaux
-    snprintf(auction_group, sizeof(auction_group), "ff12::%04x", r); // Ensure 4 hex digits with leading zeros
+    int r = rand() & 0xFFFF; 
+    snprintf(auction_group, sizeof(auction_group), "ff12::%04x", r); 
 
-    // Debug print the generated multicast address
-    // printf("Debug - Generated multicast address: %s\n", auction_group);
 
     p.enchere_active++;
     p.encheres[p.enchere_active].id_enchere = auction_num_id;
@@ -235,9 +214,7 @@ void creer_enchere()
 
     // Store the multicast address
     memcpy(&p.encheres[p.enchere_active].group, &group_addr, sizeof(struct in6_addr));
-    char debug_addr[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, debug_addr, sizeof(debug_addr));
-    printf("[DEBUG] Adresse multicast stockée : %s\n", debug_addr);
+    
 
     // Generate a random port for the auction
     uint16_t port_enchere = generate_random_port();
@@ -259,8 +236,6 @@ void creer_enchere()
     memcpy(&dest.sin6_addr, &p.encheres[p.enchere_active].group, sizeof(struct in6_addr));
     dest.sin6_scope_id = p.global_iface_index;
 
-    // sendto(p.encheres[p.enchere_active].sock, msg, sizeof(msg), 0,
-    //        (struct sockaddr *)&dest, sizeof(dest));
 
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, ip_str, sizeof(ip_str));
@@ -286,14 +261,14 @@ int msg_join_enchere()
 
 void *gestion_disp_superviseur(void *arg)
 {
-    printf("Thread de supervision lancé\n");
+    //printf("Thread de supervision lancé\n");
     pthread_mutex_lock(&p.encheres[p.enchere_active].superviseur_mutex);
     while (p.encheres[p.enchere_active].superviseur_actif) {
         pthread_cond_wait(&p.encheres[p.enchere_active].superviseur_cond, &p.encheres[p.enchere_active].superviseur_mutex);
         // Réveillé quand superviseur_actif peut avoir changé
     }
     pthread_mutex_unlock(&p.encheres[p.enchere_active].superviseur_mutex);
-    printf("Thread de supervision arrêté\n");
+    //printf("Thread de supervision arrêté\n");
     pthread_exit(NULL);
 }
 
@@ -344,7 +319,7 @@ void *auction_receiver(void *arg)
         }
         else if (ready == 0  && p.encheres[p.enchere_active].is_superviseur == 1 && p.encheres[p.enchere_active].numv_supervise != 0 && p.encheres[p.enchere_active].consensus == 0)
         {
-            //ajouter consensus && p.encheres[p.enchere_active].consensus == 0
+           
             // Aucun message reçu pendant 5 secondes
             printf("Aucun message reçu depuis 5 secondes\n");
             check_auction_timeout(); // Traitement de timeout
@@ -371,40 +346,34 @@ void *auction_receiver(void *arg)
                 snprintf(message, sizeof(message), "vente:%d:%u", mess10.numv, mess10.prix);                
                 unsigned char *signature = NULL;
                 size_t siglen = 0;
-                // p.encheres[p.enchere_active].consensus=1;
 
                 if (!sign(p.ed_privkey, (unsigned char *)message, &signature, &siglen))
                 {
                     fprintf(stderr, "Erreur lors de la signature\n");
-                    // p.encheres[p.enchere_active].consensus=0;
                     return NULL;
                 }
 
-                int len_msg = msg_1(consensus_msg, p.id_peer, message, signature, siglen); // Attention
+                int len_msg = msg_1(consensus_msg, p.encheres[p.enchere_active].my_id, message, signature, siglen);
                 if (len_msg > 0)
                 {
                     // Track the UDP message before sending
-                    if (track_udp_message(&p.udp_responses, 1, p.id_peer, consensus_msg, len_msg) != 0) {
+                    if (track_udp_message(&p.udp_responses, 1, p.encheres[p.enchere_active].my_id, consensus_msg, len_msg) != 0) {
                         fprintf(stderr, "Failed to track UDP message 1\n");
                     }
                     
                     sendto(p.socket_udp, consensus_msg, len_msg, 0,
                            (struct sockaddr *)&src, srclen);
-                    printf("Message de consensus envoyé : %s\n", message);
                 }
 
             }
         
             else if (code == 2 )
             {
-                printf("Message 2 reçu : début du consensus\n");
+                
                 struct message_2 parsed_msg = {0};
             
                 if (parse_msg_2(buffer, len, &parsed_msg) == 0)
                 {
-                    printf("Message 2 reçu : ID=%d, Message=%s\n NB=%d\n",
-                           parsed_msg.id, parsed_msg.mess, parsed_msg.nb_validations);
-                    
                     
                     // --- Vérification des signatures des pairs (max 3) ---
                     size_t offset = 1 + 2 + 1 + parsed_msg.lmess + 1 + parsed_msg.lsig + 2;
@@ -443,11 +412,9 @@ void *auction_receiver(void *arg)
                     if (parsed_msg.id != p.encheres[p.enchere_active].my_id) {
                         if (parsed_msg.nb_validations == p.encheres[p.enchere_active].nb_pairs - 1)
                         {
-                            printf("Consensus atteint pour le message 2.\n");
                             p.encheres[p.enchere_active].consensus = 0;
                         }
                         if (strcmp(parsed_msg.mess,"superviseur")==0) {
-                            printf("Message Nouveau SUperviseur\n");
                             p.encheres[p.enchere_active].is_superviseur = 1;
                             pthread_mutex_lock(&p.encheres[p.enchere_active].superviseur_mutex);
                             p.encheres[p.enchere_active].superviseur_actif = 0;
@@ -459,9 +426,7 @@ void *auction_receiver(void *arg)
                             if (n==0) {
                                 printf("suppresion du peer\n");
                             }
-                            printf("avant: %d\n",p.encheres[p.enchere_active].nb_pairs);
                             p.encheres[p.enchere_active].nb_pairs--;
-                            printf("apres: %d\n",p.encheres[p.enchere_active].nb_pairs);
                         } else if (strncmp(parsed_msg.mess, "vente:", 6) == 0) {
                             int numv = 0;
                             uint32_t prix = 0;
@@ -482,7 +447,7 @@ void *auction_receiver(void *arg)
                 struct message_8 msg;
                 if (parse_msg_8_9_10(buffer, len, &msg) == 0)
                 {
-                    printf("Message %d reçu : ID=%d, NUMV=%u, PRIX=%u\n", code, msg.id, msg.numv, msg.prix);
+                    // printf("Message %d reçu : ID=%d, NUMV=%u, PRIX=%u\n", code, msg.id, msg.numv, msg.prix);
                     handle_auction_message(code, msg.id, msg.numv, msg.prix);
                 }
             }
@@ -508,7 +473,6 @@ void *auction_receiver(void *arg)
                     printf("ID msg %d, my id %d\n", msg.id , p.encheres[p.enchere_active].my_id);
                     if(msg.id != p.encheres[p.enchere_active].my_id){
                     // if(src.sin6_port != htons(p.port_perso)){
-                        printf("[ENCHERE] : message 13 recu : debut consensus\n");
 
                         uint8_t consensus_msg[1024];
                         char *message = "quitter";
@@ -526,7 +490,6 @@ void *auction_receiver(void *arg)
                         {
                             sendto(p.socket_udp, consensus_msg, len_msg, 0,
                                 (struct sockaddr *)&src, srclen);
-                            printf("Message de consensus 13 envoyé : %s\n", message);
                         }
                         
                     }
@@ -540,13 +503,12 @@ void *auction_receiver(void *arg)
                 }
                 struct message_16_17 msg;
                 if (parse_msg_16_17(buffer, len, &msg) == 0) {
-                    printf("\n\nMessage 16 reçu : ID=%d, NUMV=%u,\n", msg.id, msg.numv);
+                    // printf("\n\nMessage 16 reçu : ID=%d, NUMV=%u,\n", msg.id, msg.numv);
                     if (supp_peer_list(&p.encheres[p.enchere_active].liste_participants, msg.id) == 0) {
                         printf("Peer %d supprimé de la liste des participants.\n", msg.id);
                         p.encheres[p.enchere_active].nb_pairs--;
 
                         if (p.encheres[p.enchere_active].nb_pairs == 1){
-                            printf("Seul au monde, je suis superviseur\n");
                             p.encheres[p.enchere_active].is_superviseur = 1;
                             return 0;
                         }
@@ -561,7 +523,6 @@ void *auction_receiver(void *arg)
                             }
                             // Envoi du message 30
                             send_msg_enchere(consensus_msg, sizeof(consensus_msg), p.enchere_active, p.socket_udp);
-                            printf("Message de consensus 30 envoyé : %s\n", message);
 
                             // lancer thread consensus 
                             p.encheres[p.enchere_active].superviseur_actif = 1;
@@ -578,7 +539,7 @@ void *auction_receiver(void *arg)
             else if (code == 30) {
                 struct message_30 msg;
                 if (parse_msg_30(buffer, len, &msg) == 0) {
-                    printf("Message 30 reçu : NUMV=%u Mess=%s\n", msg.numv, msg.mess);
+                    // printf("Message 30 reçu : NUMV=%u Mess=%s\n", msg.numv, msg.mess);
                     uint8_t consensus_msg[1024];
                     unsigned char *signature = NULL;
                     size_t siglen = 0;
@@ -593,17 +554,14 @@ void *auction_receiver(void *arg)
                     {
                         sendto(p.socket_udp, consensus_msg, len_msg, 0,
                             (struct sockaddr *)&src, srclen);
-                        printf("Message de consensus superviseur envoyé : %s\n", msg.mess);
                     }
-                    // Handle the message as needed
+                
                 }
             }
             else if (code == 17) {
                 struct message_16_17 msg;
                 if (parse_msg_16_17(buffer, len, &msg) == 0) {
-                    printf("Message 17 reçu : ID=%d, NUMV=%u\n", msg.id, msg.numv);
-                    printf("superviseur %d\n", p.encheres[p.enchere_active].superviseur_actif);
-                    // Handle the message as needed
+                    printf("Message 17 reçu, Je ne serais pas superviseur: ID=%d, NUMV=%u\n", msg.id, msg.numv);
                 }
 
             }
@@ -612,7 +570,6 @@ void *auction_receiver(void *arg)
                 if (parse_msg_51(buffer, len, &msg) == 0){
                     if (supp_peer_list(&p.encheres[p.enchere_active].liste_participants, msg.id) == 0){
                         p.encheres[p.enchere_active].nb_pairs--;
-                        printf("Peer id  supprimer: %d\n", msg.id);
                     }
                 }
             }
@@ -654,7 +611,6 @@ int init_vente () {
             break;
         } else {
             fprintf(stderr, "Erreur : entrée invalide pour le prix.\n");
-            // Vider le buffer d'entrée
             int c;
             while ((c = getchar()) != '\n' && c != EOF);
             essais++;
@@ -669,7 +625,6 @@ int init_vente () {
         printf("Erreur message 8");
     }
 
-    // Send the message to the auction group
     if (send_msg_enchere((uint8_t *)msg, sizeof(msg), p.enchere_active, p.encheres[p.enchere_active].sock) != 0) {
         fprintf(stderr, "Erreur lors de l'envoi du message d'initiation de vente.\n");
         return -1;
@@ -708,7 +663,7 @@ void faire_offre_sur_vente(int numv, uint32_t prix)
     }
 
     uint8_t msg[1 + 2 + 4 + 4]; // CODE + ID + NUMV + PRIX
-    msg[0] = 9; // CODE = 9 pour offre
+    msg[0] = 9; 
     uint16_t peer_id = (uint16_t)p.id_peer;
     uint16_t id_net = htons(peer_id);
     uint32_t numv_net = htonl(numv);
@@ -813,7 +768,6 @@ void mettre_fin()
             if (msg_8_9_10(relay_msg, 10, current_bidder, current_numv, current_price) == 11) {
                 send_msg_enchere(relay_msg, 11, p.enchere_active, p.socket_udp);
             }
-           
         }
     }
     uint8_t msg[1 + 2]; // CODE + ID 
@@ -826,9 +780,7 @@ void mettre_fin()
     if (send_msg_enchere(msg, sizeof(msg), p.enchere_active, p.socket_udp) != 0) {
         fprintf(stderr, "Erreur lors de l'envoi pour quitter.\n");
         return;
-    }
-    printf("En cours pour partir\n");
-    
+    }    
 }
 
 
@@ -1026,31 +978,6 @@ int handle_peer_disappearance(uint16_t *absent_peer_ids, uint16_t num_absent) {
     uint8_t final_msg[BUF_SIZE];
     int final_msg_len;
 
-    // if (nb_validations <= 3) {
-    //     // Send single CODE=2 message with all validations
-    //     final_msg_len = msg_2(final_msg, p.id_peer, (char *) msg_buffer, supervisor_signature, 
-    //                         supervisor_siglen, nb_validations);
-        
-    //     // Append all validations
-    //     size_t offset = final_msg_len;
-    //     struct valid_peer *cur = head;
-    //     while (cur != NULL) {
-    //         uint16_t id_net = htons(cur->id);
-    //         memcpy(final_msg + offset, &id_net, sizeof(uint16_t));
-    //         offset += sizeof(uint16_t);
-    //         final_msg[offset++] = cur->lsig;
-    //         memcpy(final_msg + offset, cur->sig, cur->lsig);
-    //         offset += cur->lsig;
-    //         cur = cur->next;
-    //     }
-
-    //     if (send_msg_enchere(final_msg, offset, p.enchere_active, 
-    //                        p.encheres[p.enchere_active].sock) < 0) {
-    //         fprintf(stderr, "Error sending final consensus message\n");
-    //         free(supervisor_signature);
-    //         free_valid_peer_list(head);
-    //         return -1;
-    //     }
     if (nb_validations <= 3) {
         // Préparer les tableaux pour les validations
         uint16_t peer_ids[3];
@@ -1078,31 +1005,8 @@ int handle_peer_disappearance(uint16_t *absent_peer_ids, uint16_t num_absent) {
             return -1;
         }
     } else {
-        // // Send initial CODE=2 with first 3 validations
-        // final_msg_len = msg_2(final_msg, p.id_peer, (char *) msg_buffer, supervisor_signature, 
-        //                     supervisor_siglen, 3);
         
-        // // Append first 3 validations
-        // size_t offset = final_msg_len;
-        // struct valid_peer *cur = head;
-        // for (int i = 0; i < 3 && cur != NULL; i++) {
-        //     uint16_t id_net = htons(cur->id);
-        //     memcpy(final_msg + offset, &id_net, sizeof(uint16_t));
-        //     offset += sizeof(uint16_t);
-        //     final_msg[offset++] = cur->lsig;
-        //     memcpy(final_msg + offset, cur->sig, cur->lsig);
-        //     offset += cur->lsig;
-        //     cur = cur->next;
-        // }
-
-        // if (send_msg_enchere(final_msg, offset, p.enchere_active, 
-        //                    p.encheres[p.enchere_active].sock) < 0) {
-        //     fprintf(stderr, "Error sending initial consensus message\n");
-        //     free(supervisor_signature);
-        //     free_valid_peer_list(head);
-        //     return -1;
-        // }
-            // Préparer les tableaux pour les 3 premières validations
+        // Préparer les tableaux pour les 3 premières validations
         uint16_t peer_ids_start[3];
         uint8_t sig_lengths_start[3];
         unsigned char *signatures_start[3];
@@ -1219,7 +1123,7 @@ void free_ventes(Vente *ventes) {
 
 void afficher_vente(Vente *ventes) {
     if (!ventes) {
-        printf("   (Aucune vente en cours)\n");
+        printf("     (Aucune vente en cours)\n");
         return;
     }
     Vente *cur = ventes;

@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <netinet/in.h>
-// #include "peer.h"
 
 typedef struct Vente {
     int numv; // id unique
@@ -15,7 +14,6 @@ typedef struct Vente {
 
 typedef struct {
     int sock;           // Socket de l'enchère
-    // char group[INET6_ADDRSTRLEN];  // Groupe de l'enchère
     pthread_t thread_id; // ID du thread d'écoute
     struct in6_addr group; // Adresse IPv6 du groupe d'enchère
     int id_enchere;     // ID de l'enchère
@@ -24,7 +22,6 @@ typedef struct {
 
     Vente *ventes; // Liste des ventes associées à l'enchère
     int nb_ventes;
-    // int numv; // Numéro de la vente
 
     struct peer_list *liste_participants; // Liste des pairs de cette enchère
 
@@ -40,11 +37,10 @@ typedef struct {
 
 } EnchereSocket;
 
-// Function declarations
+
 void afficher_enncheres();
 void creer_enchere();
 int join_enchere(int id, char *group, uint16_t port);
-// void faire_offre(uint32_t prix);
 void faire_offre_sur_vente(int numv, uint32_t prix);
 void afficher_vente(Vente *ventes);
 int msg_join_enchere();

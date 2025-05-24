@@ -15,6 +15,8 @@
 #include <openssl/bio.h>
 #include "../include/peer.h"
 
+// code prof CM
+
 static peer_key peers[MAX_PEERS];
 static int peer_count = 0;
 

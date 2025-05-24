@@ -24,7 +24,7 @@
 int connexion_TCP (struct in6_addr ip, uint16_t port){
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
-    printf("Connexion TCP à %s:%u...\n", ip_str, (port)); 
+    //printf("Connexion TCP à %s:%u...\n", ip_str, (port)); 
 
     // Create socket
     int socket_tcp_client = socket(PF_INET6, SOCK_STREAM, 0);
@@ -66,7 +66,7 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
 // SSL *connexion_TLS(struct in6_addr ip, uint16_t port) {
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
-    printf("Connexion TLS à %s:%u...\n", ip_str, (port));    
+    //printf("Connexion TLS à %s:%u...\n", ip_str, (port));    
 
     // Create socket
     int socket_tcp_client = socket(AF_INET6, SOCK_STREAM, 0);
@@ -183,11 +183,7 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
         
         struct message_50 msg_50;
         if (parse_msg_50(response, bytes_read, &msg_50) == 0) {
-            printf("ID accepté   enchere active %d\n", p.enchere_active);
-
             p.encheres[p.nb_encheres].my_id = p.id_peer;
-            printf("MY ID %d\n", p.encheres[p.nb_encheres].my_id);
-            //snprintf(id_peer, sizeof(id_peer), "%u", msg_50.id);
         }
     } else if (response[0] == 51) {
         
@@ -197,7 +193,6 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
             p.encheres[p.nb_encheres].my_id = msg_51.id;
         }
     } else {
-        printf("Message de réponse inattendu : %u\n", response[0]);
         // cleanup_ssl_connection(ssl);
         close(socket_tcp_client);
         return -1;

@@ -10,7 +10,6 @@ void init_udp_response_manager(struct udp_response_manager* manager) {
     manager->pending_messages = malloc(sizeof(struct udp_message_status) * MAX_PENDING_MESSAGES);
     manager->num_pending = 0;
     manager->max_pending = MAX_PENDING_MESSAGES;
-    // printf("[UDP Response] Initialized UDP response manager with capacity for %d pending messages\n", MAX_PENDING_MESSAGES);
 }
 
 void cleanup_udp_response_manager(struct udp_response_manager* manager) {
@@ -25,7 +24,6 @@ void cleanup_udp_response_manager(struct udp_response_manager* manager) {
 int track_udp_message(struct udp_response_manager* manager, uint8_t code, uint16_t peer_id, 
                      void* message_data, size_t message_len) {
     if (manager->num_pending >= manager->max_pending) {
-        // printf("[UDP Response] Warning: Cannot track new message - maximum pending messages reached\n");
         return -1;
     }
 
@@ -66,12 +64,10 @@ void check_and_retry_messages(struct udp_response_manager* manager) {
     for (int i = 0; i < manager->num_pending; i++) {
         struct udp_message_status* msg = &manager->pending_messages[i];
         
-        // Skip completed messages
         if (msg->completed) continue;
         
-        // Check if max retries reached
         if (msg->retry_count >= MAX_RETRIES) {
-            // Add to absent peers list if not already present
+            
             bool already_listed = false;
             for (int j = 0; j < num_absent; j++) {
                 if (absent_peers[j] == msg->target_peer_id) {
@@ -85,9 +81,8 @@ void check_and_retry_messages(struct udp_response_manager* manager) {
             continue;
         }
         
-        // Check if it's time to retry
         if (current_time - msg->last_sent_time >= RETRY_TIMEOUT_SEC) {
-            // Retry sending the message
+           
             struct sockaddr_in6 peer_addr = {0};
             peer_addr.sin6_family = AF_INET6;
             peer_addr.sin6_port = htons(p.port_perso);

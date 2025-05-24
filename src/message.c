@@ -4,13 +4,13 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <arpa/inet.h> // Pour htonl et htons
+#include <arpa/inet.h> 
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/pem.h>
-#include <unistd.h> // pour close()
-#include <netinet/in.h> // Pour les fonctions de conversion de réseau
+#include <unistd.h> 
+#include <netinet/in.h> 
 
 #include "../include/message.h"
 #include "../include/peer.h"
@@ -37,11 +37,10 @@ int msg_4(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp) {
         return -1;
     }
 
-    // Construction du message
     msg[0] = code;
 
-    uint16_t id_net = htons(id_peer);    // Convertir en format réseau
-    uint16_t port_net = htons(port_tcp); // Convertir en format réseau
+    uint16_t id_net = htons(id_peer);    
+    uint16_t port_net = htons(port_tcp); 
 
     memcpy(&msg[1], &id_net, 2);         // ID du pair
     memcpy(&msg[3], &adresse_perso, 16); // Adresse IP
@@ -59,19 +58,16 @@ int get_adresse_perso_from_socket(int sock, struct in6_addr *addr) {
     struct sockaddr_in6 local_addr;
     socklen_t addr_len = sizeof(local_addr);
 
-    // Obtenir l'adresse locale associée à la socket
     if (getsockname(sock, (struct sockaddr *)&local_addr, &addr_len) < 0) {
         perror("getsockname");
         return -1;
     }
 
-    // Vérifier que la socket est IPv6
     if (local_addr.sin6_family != AF_INET6) {
         fprintf(stderr, "Erreur : la socket n'est pas de type IPv6.\n");
         return -1;
     }
 
-    // Copier l'adresse IPv6 dans le pointeur fourni
     memcpy(addr, &local_addr.sin6_addr, sizeof(struct in6_addr));
     return 0;
 }
@@ -100,27 +96,22 @@ int parse_msg_4(uint8_t *msg, size_t msg_len, struct message_4 *msg_struct)
 
 int msg_5(uint8_t *msg, uint16_t id_peer, uint16_t port_tcp, struct in6_addr ip, unsigned char *public_key)
 {
-    // struct in6_addr ip;
     size_t offset = 0;
-    msg[offset++] = 5; // CODE = 5
+    msg[offset++] = 5; 
 
-    // ID (big endian)
     msg[offset++] = (id_peer >> 8) & 0xFF;
     msg[offset++] = id_peer & 0xFF;
 
-    // IP (16 octets)
     memcpy(msg + offset, &ip, 16);
     offset += 16;
 
-    // PORT (big endian)
     msg[offset++] = (port_tcp >> 8) & 0xFF;
     msg[offset++] = port_tcp & 0xFF;
 
-    // CLE PUBLIQUE (113 octets)
     memcpy(msg + offset, public_key, ED25519_KEY_WITH_HEADER_SIZE);
     offset += ED25519_KEY_WITH_HEADER_SIZE;
 
-    return offset; // taille totale écrite
+    return offset; 
 }
 
 int parse_msg_5(uint8_t *msg, size_t msg_len, struct message_5 *msg_struct)
@@ -150,14 +141,14 @@ int parse_msg_5(uint8_t *msg, size_t msg_len, struct message_5 *msg_struct)
 // --------------------------- CODE 50 -----------------------------------------------
 int msg_50(uint8_t *msg)
 {
-    msg[0] = 50; // CODE = 50
-    return 1;    // taille totale écrite
+    msg[0] = 50; 
+    return 1;    
 }
 
 int parse_msg_50(uint8_t *msg, size_t msg_len, struct message_50 *msg_struct)
 {
     if (msg_len < 1)
-        return -1; // message trop court
+        return -1; 
 
     msg_struct->code = msg[0];
     if (msg_struct->code != 50)
@@ -168,16 +159,16 @@ int parse_msg_50(uint8_t *msg, size_t msg_len, struct message_50 *msg_struct)
 // --------------------------- CODE 51 -----------------------------------------------
 int msg_51(uint8_t *msg, uint16_t id)
 {
-    msg[0] = 51; // CODE = 51
+    msg[0] = 51; 
     msg[1] = (id >> 8) & 0xFF;
     msg[2] = id & 0xFF;
-    return 3; // taille totale écrite
+    return 3; 
 }
 
 int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct)
 {
     if (msg_len < 3)
-        return -1; // message trop court
+        return -1; 
 
     msg_struct->code = msg[0];
     if (msg_struct->code != 51)
@@ -190,39 +181,35 @@ int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct)
 int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
     if (!msg) return -1;
     
-    // Validate code
     if (code != 8 && code != 9 && code != 10) return -1;
     
     msg[0] = code; // Message code (8, 9, or 10)
     
-    // ID (2 bytes, network byte order)
     uint16_t id_net = htons(id);
     memcpy(&msg[1], &id_net, sizeof(id_net));
     
-    // NUMV (4 bytes, network byte order)
     uint32_t numv_net = htonl(numv);
     memcpy(&msg[3], &numv_net, sizeof(numv_net));
     
-    // PRIX (4 bytes, network byte order)
     uint32_t prix_net = htonl(prix);
     memcpy(&msg[7], &prix_net, sizeof(prix_net));
     
-    return 11; // Total message size
+    return 11; 
 }
 
 // ---------------  CODE 13 ------------------------------------------------
 int msg_13(uint8_t *msg, uint16_t id)
 {
-    msg[0] = 13; // CODE = 51
+    msg[0] = 13; 
     msg[1] = (id >> 8) & 0xFF;
     msg[2] = id & 0xFF;
-    return 3; // taille totale écrite
+    return 3; 
 }
 
 int parse_msg_13(uint8_t *msg, size_t msg_len, struct message_13 *msg_struct)
 {
     if (msg_len < 3)
-        return -1; // message trop court
+        return -1; 
 
     msg_struct->code = msg[0];
     if (msg_struct->code != 13)
@@ -232,28 +219,24 @@ int parse_msg_13(uint8_t *msg, size_t msg_len, struct message_13 *msg_struct)
     return 0;
 }
 
-// Function to create rejection messages (14, 15)
+
 int msg_14_15(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
     if (!msg) return -1;
     
-    // Validate code
     if (code != 14 && code != 15) return -1;
     
     msg[0] = code; // Message code (14 or 15)
     
-    // ID (2 bytes, network byte order)
     uint16_t id_net = htons(id);
     memcpy(&msg[1], &id_net, sizeof(id_net));
     
-    // NUMV (4 bytes, network byte order)
     uint32_t numv_net = htonl(numv);
     memcpy(&msg[3], &numv_net, sizeof(numv_net));
     
-    // PRIX (4 bytes, network byte order)
     uint32_t prix_net = htonl(prix);
     memcpy(&msg[7], &prix_net, sizeof(prix_net));
     
-    return 11; // Total message size
+    return 11; 
 }
 
 // Function to parse auction messages (8, 9, 10)
@@ -263,17 +246,14 @@ int parse_msg_8_9_10(uint8_t *msg, size_t msg_len, struct message_8 *msg_struct)
     msg_struct->code = msg[0];
     if (msg_struct->code != 8 && msg_struct->code != 9 && msg_struct->code != 10) return -1;
     
-    // Parse ID (2 bytes)
     uint16_t id_net;
     memcpy(&id_net, &msg[1], sizeof(id_net));
     msg_struct->id = ntohs(id_net);
     
-    // Parse NUMV (4 bytes)
     uint32_t numv_net;
     memcpy(&numv_net, &msg[3], sizeof(numv_net));
     msg_struct->numv = ntohl(numv_net);
     
-    // Parse PRIX (4 bytes)
     uint32_t prix_net;
     memcpy(&prix_net, &msg[7], sizeof(prix_net));
     msg_struct->prix = ntohl(prix_net);
@@ -287,10 +267,9 @@ int msg_1(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen) {
     uint8_t codemsg = 1;
     uint8_t lmess = (uint8_t)strlen(mess);
 
-    if (lmess > 255 || siglen > 255) return -1;  // sécurité
+    if (lmess > 255 || siglen > 255) return -1;  
 
-    uint16_t net_id = htons(id); // 2 octets en réseau
-
+    uint16_t net_id = htons(id);
     size_t offset = 0;
 
     msg[offset++] = codemsg;
@@ -310,7 +289,7 @@ int msg_1(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen) {
         offset += siglen;
     }
 
-    return (int)offset;  // longueur totale du message
+    return (int)offset;  
 }
 
 int parse_msg_1(const uint8_t *buf, size_t len, struct message_1 *msg) {
@@ -346,79 +325,6 @@ int parse_msg_1(const uint8_t *buf, size_t len, struct message_1 *msg) {
 
 
 // ---------------------------------- CODE 2   -------------------------------------------
-// int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations) {
-//     uint8_t codemsg = 2;
-//     uint8_t lmess = (uint8_t)strlen(mess);
-
-//     if (lmess > 255 || siglen > 255) return -1;  // sécurité
-
-//     uint16_t net_id = htons(id); // 2 octets en réseau
-
-//     size_t offset = 0;
-
-//     msg[offset++] = codemsg;
-
-//     memcpy(msg + offset, &net_id, sizeof(net_id));
-//     offset += sizeof(net_id);
-
-//     msg[offset++] = lmess;
-
-//     memcpy(msg + offset, mess, lmess);
-//     offset += lmess;
-
-//     msg[offset++] = siglen;
-
-//     if (siglen > 0) {
-//         memcpy(msg + offset, sig, siglen);
-//         offset += siglen;
-//     }
-
-//     // Ajout du nombre de validations sur 2 octets
-//     uint16_t net_nb_validations = htons(nb_validations);
-//     memcpy(msg + offset, &net_nb_validations, sizeof(net_nb_validations));
-//     offset += sizeof(net_nb_validations);
-
-//     return (int)offset;  // retourne la taille totale du message
-// }
-
-// int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg) {
-
-//     if (len < 3) return -1; // Minimum : CODE + ID(2) + LMESS + LSIG
-
-//     size_t offset = 0;
-
-//     uint8_t code = buf[offset++];
-//     if (code != 2) return -2;
-
-//     msg->id = ntohs(*(uint16_t *)(buf + offset));
-//     offset += 2;
-
-//     msg->lmess = buf[offset++];
-//     if (msg->lmess > 255 || offset + msg->lmess + 1 > len)
-//         return -3;
-
-//     memcpy(msg->mess, buf + offset, msg->lmess);
-//     msg->mess[msg->lmess] = '\0';
-//     offset += msg->lmess;
-
-//     // printf("DEBUG: lsig=%u, offset=%zu, len=%zu\n", msg->lsig, offset, len);
-//     msg->lsig = buf[offset++];
-//     if (msg->lsig > ED25519_SIGNATURE_SIZE || offset + msg->lsig > len)
-//         return -4;
-
-//     if (msg->lsig > 0)
-//         memcpy(msg->sig, buf + offset, msg->lsig);
-//     offset += msg->lsig;
-
-//     // Ajout du nombre de validations sur 2 octets
-//     // if (offset + sizeof(uint16_t) > len)
-//     //     return -5;
-//     msg->nb_validations = ntohs(*(uint16_t *)(buf + offset));
-//     offset += sizeof(uint16_t);
-
-//     return 0;
-// }
-
 
 int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations,
           uint16_t *ids, uint8_t *siglens, unsigned char **sigs) {
@@ -502,20 +408,17 @@ int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg) {
 int msg_16_17(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv) {
     if (!msg) return -1;
     
-    // Validate code
     if (code != 16 && code != 17) return -1;
     
-    msg[0] = code; // Message code 
+    msg[0] = code; 
     
-    // ID (2 bytes, network byte order)
     uint16_t id_net = htons(id);
     memcpy(&msg[1], &id_net, sizeof(id_net));
     
-    // NUMV (4 bytes, network byte order)
     uint32_t numv_net = htonl(numv);
     memcpy(&msg[3], &numv_net, sizeof(numv_net));
     
-    return 7; // Total message size
+    return 7; 
 }
 
 int parse_msg_16_17(uint8_t *msg, size_t msg_len, struct message_16_17 *msg_struct) {
@@ -524,12 +427,10 @@ int parse_msg_16_17(uint8_t *msg, size_t msg_len, struct message_16_17 *msg_stru
     msg_struct->code = msg[0];
     if (msg_struct->code != 16 && msg_struct->code != 17) return -1;
     
-    // Parse ID (2 bytes)
     uint16_t id_net;
     memcpy(&id_net, &msg[1], sizeof(id_net));
     msg_struct->id = ntohs(id_net);
     
-    // Parse NUMV (4 bytes)
     uint32_t numv_net;
     memcpy(&numv_net, &msg[3], sizeof(numv_net));
     msg_struct->numv = ntohl(numv_net);
@@ -540,19 +441,16 @@ int parse_msg_16_17(uint8_t *msg, size_t msg_len, struct message_16_17 *msg_stru
 int msg_30(uint8_t *buf, uint32_t numv, char *mess) {
     if (!buf || !mess) return -1;
 
-    buf[0] = 30; // CODE = 30
+    buf[0] = 30; 
 
     uint32_t numv_net = htonl(numv);
-    memcpy(&buf[1], &numv_net, sizeof(numv_net)); // NUMV = 4 octets
+    memcpy(&buf[1], &numv_net, sizeof(numv_net)); 
 
-    uint8_t lmess = (uint8_t)strlen(mess); // longueur du message
-    buf[5] = lmess; // ECRIRE lmess (important !)
-    memcpy(&buf[6], mess, lmess); // contenu du message
+    uint8_t lmess = (uint8_t)strlen(mess); 
+    buf[5] = lmess; 
+    memcpy(&buf[6], mess, lmess); 
 
-    // Affichage debug
-    printf("msg_30 : CODE=30, numv=%u, lmess=%u, mess=%s\n", numv, lmess, mess);
-
-    return 6 + lmess; // taille totale du message
+    return 6 + lmess; 
 }
 
 int parse_msg_30(uint8_t *msg, size_t len, struct message_30 *out) {
@@ -572,129 +470,11 @@ int parse_msg_30(uint8_t *msg, size_t len, struct message_30 *out) {
         return -3;
 
     memcpy(out->mess, msg + offset, out->lmess);
-    out->mess[out->lmess] = '\0'; // terminaison
-
-    // Affichage debug
-    printf("parse_msg_30 : code=%d, numv=%u, lmess=%u, mess=%s\n",
-           out->code, out->numv, out->lmess, out->mess);
+    out->mess[out->lmess] = '\0';
 
     return 0;
 }
 
-
-
-void envoyer_disparition(int socket, bool superviseur, uint16_t id, uint32_t numv, uint16_t *ids_disparus, uint16_t nb)
-{
-    if (superviseur)
-    {
-        // Cas d'un superviseur disparu (CODE = 16 ou 17)
-        DisparitionSuperviseurMessage msg;
-        msg.CODE = 16; // Par défaut, CODE = 16 (annulation d'une vente)
-        msg.ID = htons(id);
-        msg.NUMV = htonl(numv);
-
-        send(socket, &msg, sizeof(msg), 0);
-    }
-    else
-    {
-        // Cas de disparition de pairs non superviseurs (CODE = 18)
-        size_t taille_msg = sizeof(DisparitionPairsMessage) + nb * sizeof(uint16_t);
-        DisparitionPairsMessage *msg = malloc(taille_msg);
-        if (!msg)
-        {
-            perror("Erreur d'allocation mémoire");
-            return;
-        }
-
-        msg->CODE = 18;
-        msg->ID = htons(id);
-        msg->NB = htons(nb);
-
-        // Ajouter les identifiants des pairs disparus
-        for (int i = 0; i < nb; i++)
-        {
-            msg->ids[i] = htons(ids_disparus[i]);
-        }
-
-        // Envoi du message
-        send(socket, msg, taille_msg, 0);
-        free(msg);
-    }
-}
-
-void envoyer_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t prix)
-{
-    FinalisationVenteMessage msg;
-    if (etape == true)
-    {                 // true pour initier false pour enrichier
-        msg.CODE = 8; // supeviseur
-    }
-    else
-    {
-        msg.CODE = 9; //
-    }
-    // la gestion de l'id dans l'appel
-    // faire verif si on est true le code doit etre 8 et c'est oblige superviseur
-    // pour la cloture soit superviseur si personne la prend ou gagnant si reuss
-    msg.ID = htons(id);
-    msg.NUMV = htonl(numv);
-    msg.PRIX = htonl(prix);
-
-    send(socket, &msg, sizeof(msg), 0);
-}
-
-void envoyer_finalisation_vente(int socket, bool etape, uint16_t id, uint32_t numv, uint32_t prix)
-{
-    FinalisationVenteMessage msg;
-    if (etape == true)
-    { // true pour cloture false pour finalisation
-        msg.CODE = 11;
-    }
-    else
-    {
-        msg.CODE = 12;
-    }
-    // la gestion de l'id dans l'appel
-    // faire verif si on est true le code doit etre 11 et c'est oblige superviseur
-    // pour la cloture soit superviseur si personne la prend ou gagnant si reuss
-    msg.ID = htons(id);
-    msg.NUMV = htonl(numv);
-    msg.PRIX = htonl(prix);
-
-    send(socket, &msg, sizeof(msg), 0);
-}
-
-// Fonction pour envoyer le message
-void envoyer_rejet(int socket, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix)
-{
-    RejetMessage msg;
-    msg.CODE = code; // 14 ou 15
-    // quand on fait apelle a la fonction on met 14 ou 15, CODE vaut 14 si l'enchère est rejetée car en concurrence avec une autre enchère et 15 sinon
-    msg.ID = htons(id);     // Conversion en big-endian
-    msg.NUMV = htonl(numv); // Conversion en big-endian
-    msg.PRIX = htonl(prix); // Conversion en big-endian
-
-    send(socket, &msg, sizeof(msg), 0);
-}
-
-void envoyer_message(int socket, uint16_t id)
-{
-    QuitMessage msg;
-    msg.CODE = 13;      // Code du message de fin
-    msg.ID = htons(id); // Conversion en big-endian
-
-    send(socket, &msg, sizeof(msg), 0);
-}
-
-void envoyer_enchere(int socket, uint16_t id, uint32_t numv, uint32_t prix)
-{
-    VenteMessage msg;
-    msg.CODE = 10; // Code d'enchère
-    msg.ID = htons(id);
-    msg.NUMV = htonl(numv);
-    msg.PRIX = htonl(prix);
-    send(socket, &msg, sizeof(msg), 0);
-}
 
 // --------------------------- CODE 6 -----------------------------------------------
 int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp, unsigned char *cle)
@@ -702,29 +482,28 @@ int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp,
     size_t offset = 0;
     msg[offset++] = 6; // CODE = 6
 
-    // ID (big endian)
+    
     msg[offset++] = (id_peer >> 8) & 0xFF;
     msg[offset++] = id_peer & 0xFF;
 
-    // IP (16 octets)
+
     memcpy(msg + offset, &ip, 16);
     offset += 16;
 
-    // PORT (big endian)
     msg[offset++] = (port_tcp >> 8) & 0xFF;
     msg[offset++] = port_tcp & 0xFF;
 
-    // CLE PUBLIQUE (113 octets)
+
     memcpy(msg + offset, cle, 113);
     offset += 113;
 
-    return offset; // taille totale écrite
+    return offset; 
 }
 
 int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct)
 {
     if (msg_len < 1 + 2 + 16 + 2 + 113)
-        return -1; // message trop court
+        return -1; 
 
     size_t offset = 0;
 
@@ -748,123 +527,6 @@ int parse_msg_6(uint8_t *msg, size_t msg_len, struct message_6 *msg_struct)
 }
 
 // --------------------------- CODE 7 -----------------------------------------------
-int msg_7(uint8_t *buffer, size_t buffer_size, EnchereSocket q, uint16_t nb_pairs) {
-    if (!buffer || buffer_size < 22) {
-        fprintf(stderr, "Buffer too small for message 7 (need at least 22 bytes, got %zu)\n", buffer_size);
-        return -1;
-    }
-
-    size_t offset = 0;
-
-    // CODE = 7
-    buffer[offset++] = 7;
-
-    // Debug print the multicast address before sending
-    char str_ip[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &q.group, str_ip, INET6_ADDRSTRLEN);
-    printf("Debug - Preparing message 7 with multicast address: %s\n", str_ip);
-
-    // Verify this is a valid multicast address before sending
-    if (!IN6_IS_ADDR_MULTICAST(&q.group)) {
-        fprintf(stderr, "Invalid multicast address in msg_7: %s\n", str_ip);
-        return -1;
-    }
-
-    // ID_Q (2 octets)
-    uint16_t id_net = htons(q.id_enchere);
-    memcpy(buffer + offset, &id_net, sizeof(uint16_t));
-    offset += sizeof(uint16_t);
-
-    // IP_enchere (16 octets) - Copy the multicast address
-    memcpy(buffer + offset, &q.group, sizeof(struct in6_addr));
-    offset += sizeof(struct in6_addr);
-
-    // PORT (2 octets)
-    uint16_t port_net = htons(q.port_enchere);
-    memcpy(buffer + offset, &port_net, sizeof(uint16_t));
-    offset += sizeof(uint16_t);
-
-    // NB (2 octets)
-    uint16_t nb_net = htons(nb_pairs);
-    memcpy(buffer + offset, &nb_net, sizeof(uint16_t));
-    offset += sizeof(uint16_t);
-
-    // Debug print final message details
-    printf("Debug - Message 7 details:\n");
-    printf("  - ID_Q: %d\n", q.id_enchere);
-    printf("  - Multicast address: %s\n", str_ip);
-    printf("  - Port: %d\n", q.port_enchere);
-    printf("  - Number of peers: %d\n", nb_pairs);
-    printf("  - Total message size: %zu bytes\n", offset);
-
-    return offset; // Return the actual size of the message
-}
-
-int decode_message_7(uint8_t *buffer, size_t buffer_size) {
-    if (!buffer || buffer_size < 22) {
-        fprintf(stderr, "Buffer too small for message 7 (need at least 22 bytes, got %zu)\n", buffer_size);
-        return -1;
-    }
-
-    size_t offset = 0;
-
-    // CODE = 7 (vérification de l'entête)
-    uint8_t code = buffer[offset++];
-    if (code != 7) {
-        fprintf(stderr, "Invalid message code: %d (expected 7)\n", code);
-        return -1;
-    }
-
-    // ID_Q
-    uint16_t id_q;
-    memcpy(&id_q, buffer + offset, sizeof(uint16_t));
-    id_q = ntohs(id_q);
-    offset += sizeof(uint16_t);
-
-    // IP_enchere - Copy the multicast address
-    struct in6_addr multicast_addr;
-    memcpy(&multicast_addr, buffer + offset, sizeof(struct in6_addr));
-    offset += sizeof(struct in6_addr);
-
-    // Debug print before validation
-    char str_ip[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &multicast_addr, str_ip, INET6_ADDRSTRLEN);
-    printf("Debug - Raw multicast address from message: %s\n", str_ip);
-
-    // Verify this is a valid multicast address
-    if (!IN6_IS_ADDR_MULTICAST(&multicast_addr)) {
-        fprintf(stderr, "Invalid multicast address in message 7: %s\n", str_ip);
-        return -1;
-    }
-
-    // PORT
-    uint16_t port;
-    memcpy(&port, buffer + offset, sizeof(uint16_t));
-    port = ntohs(port);
-    offset += sizeof(uint16_t);
-
-    // NB (nombre de pairs)
-    uint16_t nb_pairs;
-    memcpy(&nb_pairs, buffer + offset, sizeof(uint16_t));
-    nb_pairs = ntohs(nb_pairs);
-    offset += sizeof(uint16_t);
-
-    // Store the values in the p.encheres array
-    p.encheres[p.enchere_active].id_enchere = id_q;
-    memcpy(&p.encheres[p.enchere_active].group, &multicast_addr, sizeof(struct in6_addr));
-    p.encheres[p.enchere_active].port_enchere = port;
-    p.encheres[p.enchere_active].nb_pairs = nb_pairs;
-
-    // Debug print after validation
-    inet_ntop(AF_INET6, &p.encheres[p.enchere_active].group, str_ip, INET6_ADDRSTRLEN);
-    printf("Debug - Message 7 decoded successfully:\n");
-    printf("  - ID_Q: %d\n", p.encheres[p.enchere_active].id_enchere);
-    printf("  - Multicast address: %s\n", str_ip);
-    printf("  - Port: %d\n", p.encheres[p.enchere_active].port_enchere);
-    printf("  - Number of peers: %d\n", p.encheres[p.enchere_active].nb_pairs);
-
-    return 0;
-}
 
 int message_7_header(uint8_t *buffer, size_t buffer_size, EnchereSocket q) {
     if (!buffer || buffer_size < 22) {
@@ -874,29 +536,23 @@ int message_7_header(uint8_t *buffer, size_t buffer_size, EnchereSocket q) {
 
     size_t offset = 0;
 
-    // CODE = 7 (1 octet)
     buffer[offset++] = 7;
 
-    // ID_Q (2 octets, réseau)
     uint16_t id_net = htons(q.id_enchere);
     memcpy(buffer + offset, &id_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // IP_enchere (16 octets) - Adresse multicast
     memcpy(buffer + offset, &q.group, sizeof(struct in6_addr));
     offset += sizeof(struct in6_addr);
 
-    // PORT (2 octets, réseau)
     uint16_t port_net = htons(q.port_enchere);
     memcpy(buffer + offset, &port_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // NB (2 octets, réseau) - Nombre de pairs
     uint16_t nb_net = htons(q.nb_pairs);
     memcpy(buffer + offset, &nb_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    // Debug print
     char str_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &q.group, str_ip, INET6_ADDRSTRLEN);
     printf("Debug - Message 7 header created:\n");
@@ -907,16 +563,15 @@ int message_7_header(uint8_t *buffer, size_t buffer_size, EnchereSocket q) {
     printf("  - Number of peers: %d\n", q.nb_pairs);
     printf("  - Total message size: %zu bytes\n", offset);
 
-    return offset; // Taille totale du message
+    return offset; 
 }
 
 int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
-    uint8_t buffer[23]; // Taille minimale pour un message_7_header
+    uint8_t buffer[23]; 
     memset(buffer, 0, sizeof(buffer));
 
     size_t total_received = 0;
 
-    // Lire les données jusqu'à ce que 23 octets soient reçus
     while (total_received < 23) {
     ssize_t received = recv(socket, buffer + total_received, 23 - total_received, 0);
     // ssize_t received = SSL_read(socket, buffer + total_received, sizeof(buffer) - total_received);
@@ -935,30 +590,25 @@ int recevoir_message_7_header(int socket, EnchereSocket *enchere) {
 
     size_t offset = 0;
 
-    // Vérifier le code (1 octet)
     uint8_t code = buffer[offset++];
     if (code != 7) {
         fprintf(stderr, "Erreur : code de message invalide (reçu %d, attendu 7).\n", code);
         return -1;
     }
 
-    // Extraire ID_Q (2 octets)
     uint16_t id_q;
     memcpy(&id_q, buffer + offset, sizeof(uint16_t));
     enchere->id_enchere = ntohs(id_q);
     offset += sizeof(uint16_t);
 
-    // Extraire IP_enchere (16 octets)
     memcpy(&enchere->group, buffer + offset, sizeof(struct in6_addr));
     offset += sizeof(struct in6_addr);
 
-    // Extraire PORT (2 octets)
     uint16_t port;
     memcpy(&port, buffer + offset, sizeof(uint16_t));
     enchere->port_enchere = ntohs(port);
     offset += sizeof(uint16_t);
 
-    // Extraire NB (2 octets)
     uint16_t nb_pairs;
     memcpy(&nb_pairs, buffer + offset, sizeof(uint16_t));
     enchere->nb_pairs = ntohs(nb_pairs);
@@ -986,35 +636,28 @@ void envoyer_infos_peers(int socket, EnchereSocket *enchere) {
     peer_list *current = enchere->liste_participants;
 
     do {
-        // Préparer le message de 133 octets
         uint8_t msg[133];
         size_t offset = 0;
 
-        // ID (2 octets, réseau)
         uint16_t id_net = htons(current->id);
         memcpy(msg + offset, &id_net, sizeof(uint16_t));
         offset += sizeof(uint16_t);
 
-        // IP (16 octets)
         memcpy(msg + offset, &current->ip, sizeof(struct in6_addr));
         offset += sizeof(struct in6_addr);
 
-        // Clé publique (113 octets)
         memcpy(msg + offset, current->cle, 113);
         offset += 113;
 
-        // Port (2 octets, réseau)
         uint16_t port_net = htons(current->port_tcp);
         memcpy(msg + offset, &port_net, sizeof(uint16_t));
         offset += sizeof(uint16_t);
 
-        // Vérifier que le message est bien de 133 octets
         if (offset != 133) {
             fprintf(stderr, "Erreur : taille du message incorrecte (%zu octets, attendu 133).\n", offset);
             return;
         }
 
-        // Envoi du message avec while
         ssize_t sent = 0;
         while (sent < sizeof(msg)) {
             ssize_t result = send(socket, msg + sent, sizeof(msg) - sent, 0);
@@ -1026,9 +669,8 @@ void envoyer_infos_peers(int socket, EnchereSocket *enchere) {
         }
 
         printf("peer ID : %d \n", current->id);
-        // Passer au participant suivant
         current = current->next;
-        sleep(1); // Pause de 1 seconde entre les envois
+        sleep(1);
     } while (current != NULL);
     printf("Tous les pairs ont été envoyés avec succès.\n");
 }
@@ -1039,10 +681,10 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
         return -1;
     }
 
-    uint8_t buffer[133]; // Taille du message attendu
+    uint8_t buffer[133]; 
     size_t total_received = 0;
 
-    // Lire les données jusqu'à ce que 133 octets soient reçus
+    
     while (total_received < sizeof(buffer)) {
         ssize_t received = recv(socket, buffer + total_received, sizeof(buffer) - total_received, 0);
         // ssize_t received = SSL_read(socket, buffer + total_received, sizeof(buffer) - total_received);
@@ -1064,29 +706,23 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
         fprintf(stderr, "Erreur : taille du message incorrecte (%zu octets, attendu 133).\n", total_received);
         return -1;
     }
-    // Extraire les informations du peer
+
     size_t offset = 0;
 
-    // ID (2 octets)
     uint16_t id = ntohs(*(uint16_t *)(buffer + offset));
     offset += sizeof(uint16_t);
 
-    // IP (16 octets)
     struct in6_addr ip;
     memcpy(&ip, buffer + offset, sizeof(struct in6_addr));
     offset += sizeof(struct in6_addr);
 
-    // Clé publique (113 octets)
     unsigned char cle[113];
     memcpy(cle, buffer + offset, 113);
     offset += 113;
 
-    // Port (2 octets)
     uint16_t port = ntohs(*(uint16_t *)(buffer + offset));
     offset += sizeof(uint16_t);
 
-    printf("taille : %zu\n", offset);
-    // Vérifier que le message est bien de 133 octets
     if (offset != 133) {
         fprintf(stderr, "Erreur : taille du message incorrecte (%zu octets, attendu 133).\n", offset);
         return -1;
@@ -1109,78 +745,57 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
     return 0;
 }
 
-// void envoyer_info_auction(int socket, uint16_t id, uint32_t numv, uint32_t prix,
-//                           const unsigned char *message, size_t message_len,
-//                           const unsigned char *signature)
-// {
-//     uint8_t msg[1 + 2 + 4 + 4 + 1 + 256 + 1 + ED25519_SIGNATURE_SIZE]; // Maximum size
-//     int msg_len = msg_7(msg, id, numv, prix, message, message_len, signature, ED25519_SIGNATURE_SIZE);
-//     if (msg_len > 0)
-//     {
-//         send(socket, msg, msg_len, 0);
-//     }
-// }
 
 // Function to create finalization warning message (code 11)
 int msg_11(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix) {
     if (!msg) return -1;
     
-    msg[0] = 11; // Message code
+    msg[0] = 11; 
     
-    // ID (2 bytes, network byte order)
     uint16_t id_net = htons(id);
     memcpy(&msg[1], &id_net, sizeof(id_net));
     
-    // NUMV (4 bytes, network byte order)
     uint32_t numv_net = htonl(numv);
     memcpy(&msg[3], &numv_net, sizeof(numv_net));
     
-    // PRIX (4 bytes, network byte order)
     uint32_t prix_net = htonl(prix);
     memcpy(&msg[7], &prix_net, sizeof(prix_net));
     
-    return 11; // Total message size
+    return 11;
 }
 
-// Function to create finalization message (code 12)
 int msg_12(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix) {
     if (!msg) return -1;
     
-    msg[0] = 12; // Message code
-    
-    // ID (2 bytes, network byte order)
+    msg[0] = 12; 
+
     uint16_t id_net = htons(id);
     memcpy(&msg[1], &id_net, sizeof(id_net));
     
-    // NUMV (4 bytes, network byte order)
     uint32_t numv_net = htonl(numv);
     memcpy(&msg[3], &numv_net, sizeof(numv_net));
-    
-    // PRIX (4 bytes, network byte order)
+ 
     uint32_t prix_net = htonl(prix);
     memcpy(&msg[7], &prix_net, sizeof(prix_net));
     
-    return 11; // Total message size
+    return 11; 
 }
 
-// Function to parse finalization warning message (code 11)
+
 int parse_msg_11(uint8_t *msg, size_t msg_len, FinalizationWarningMessage *msg_struct) {
     if (!msg || !msg_struct || msg_len < 11) return -1;
     
     msg_struct->code = msg[0];
     if (msg_struct->code != 11) return -1;
-    
-    // Parse ID (2 bytes)
+ 
     uint16_t id_net;
     memcpy(&id_net, &msg[1], sizeof(id_net));
     msg_struct->id = ntohs(id_net);
-    
-    // Parse NUMV (4 bytes)
+  
     uint32_t numv_net;
     memcpy(&numv_net, &msg[3], sizeof(numv_net));
     msg_struct->numv = ntohl(numv_net);
-    
-    // Parse PRIX (4 bytes)
+
     uint32_t prix_net;
     memcpy(&prix_net, &msg[7], sizeof(prix_net));
     msg_struct->prix = ntohl(prix_net);
@@ -1188,24 +803,20 @@ int parse_msg_11(uint8_t *msg, size_t msg_len, FinalizationWarningMessage *msg_s
     return 0;
 }
 
-// Function to parse finalization message (code 12)
 int parse_msg_12(uint8_t *msg, size_t msg_len, FinalizationMessage *msg_struct) {
     if (!msg || !msg_struct || msg_len < 11) return -1;
     
     msg_struct->code = msg[0];
     if (msg_struct->code != 12) return -1;
     
-    // Parse ID (2 bytes)
     uint16_t id_net;
     memcpy(&id_net, &msg[1], sizeof(id_net));
     msg_struct->id = ntohs(id_net);
-    
-    // Parse NUMV (4 bytes)
+
     uint32_t numv_net;
     memcpy(&numv_net, &msg[3], sizeof(numv_net));
     msg_struct->numv = ntohl(numv_net);
     
-    // Parse PRIX (4 bytes)
     uint32_t prix_net;
     memcpy(&prix_net, &msg[7], sizeof(prix_net));
     msg_struct->prix = ntohl(prix_net);
@@ -1216,60 +827,48 @@ int parse_msg_12(uint8_t *msg, size_t msg_len, FinalizationMessage *msg_struct) 
 int msg_18(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *ids) {
     if (!msg || !ids) return -1;
     
-    // Set message code
     msg[0] = 18;
-    
-    // Set ID (network byte order)
+
     uint16_t id_net = htons(id);
     memcpy(msg + 1, &id_net, sizeof(uint16_t));
-    
-    // Set number of absent peers (network byte order)
+
     uint16_t nb_net = htons(nb);
     memcpy(msg + 3, &nb_net, sizeof(uint16_t));
-    
-    // Copy peer IDs (network byte order)
+
     for (int i = 0; i < nb; i++) {
         uint16_t id_net = htons(ids[i]);
         memcpy(msg + 5 + (i * sizeof(uint16_t)), &id_net, sizeof(uint16_t));
     }
     
-    return 5 + (nb * sizeof(uint16_t)); // Total message length
+    return 5 + (nb * sizeof(uint16_t)); 
 }
 
 int parse_msg_18(uint8_t *msg, size_t msg_len, struct message_18 *msg_struct) {
     if (!msg || !msg_struct || msg_len < 5) return -1;
-    
-    // Verify message code
+
     if (msg[0] != 18) return -1;
-    
-    // Parse ID
+
     memcpy(&msg_struct->id, msg + 1, sizeof(uint16_t));
     msg_struct->id = ntohs(msg_struct->id);
-    
-    // Parse number of absent peers
+
     memcpy(&msg_struct->nb, msg + 3, sizeof(uint16_t));
     msg_struct->nb = ntohs(msg_struct->nb);
-    
-    // Verify message length
+
     size_t expected_len = 5 + (msg_struct->nb * sizeof(uint16_t));
     if (msg_len < expected_len) return -1;
-    
-    // Allocate new structure with flexible array
+
     struct message_18 *new_struct = malloc(sizeof(struct message_18) + msg_struct->nb * sizeof(uint16_t));
     if (!new_struct) return -1;
-    
-    // Copy existing fields
+
     new_struct->code = msg_struct->code;
     new_struct->id = msg_struct->id;
     new_struct->nb = msg_struct->nb;
-    
-    // Parse peer IDs
+
     for (int i = 0; i < msg_struct->nb; i++) {
         memcpy(&new_struct->ids[i], msg + 5 + (i * sizeof(uint16_t)), sizeof(uint16_t));
         new_struct->ids[i] = ntohs(new_struct->ids[i]);
     }
-    
-    // Replace original structure
+
     memcpy(msg_struct, new_struct, sizeof(struct message_18) + msg_struct->nb * sizeof(uint16_t));
     free(new_struct);
     
@@ -1278,31 +877,26 @@ int parse_msg_18(uint8_t *msg, size_t msg_len, struct message_18 *msg_struct) {
 
 int msg_20(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *peer_ids, uint8_t *sig_lengths, uint8_t **signatures) {
     int offset = 0;
-    
-    // Message code (20)
+ 
     msg[offset++] = 20;
     
-    // ID (2 bytes)
     uint16_t id_net = htons(id);
     memcpy(msg + offset, &id_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
-    
-    // Number of signatures (2 bytes)
+
     uint16_t nb_net = htons(nb);
     memcpy(msg + offset, &nb_net, sizeof(uint16_t));
     offset += sizeof(uint16_t);
     
     // Concatenate peer IDs, signature lengths and signatures
     for (int i = 0; i < nb; i++) {
-        // Peer ID (2 bytes)
+
         uint16_t peer_id_net = htons(peer_ids[i]);
         memcpy(msg + offset, &peer_id_net, sizeof(uint16_t));
         offset += sizeof(uint16_t);
         
-        // Signature length (1 byte)
         msg[offset++] = sig_lengths[i];
-        
-        // Signature
+
         memcpy(msg + offset, signatures[i], sig_lengths[i]);
         offset += sig_lengths[i];
     }
