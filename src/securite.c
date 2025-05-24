@@ -12,7 +12,7 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
-
+#include <openssl/bio.h>
 #include "../include/peer.h"
 
 static peer_key peers[MAX_PEERS];
@@ -94,6 +94,14 @@ int lire_cle_publique_pem(const char *chemin, unsigned char cle[113]) {
     return 0;
 }
 
+// Convertit une clé publique PEM (dans un buffer) en EVP_PKEY*
+EVP_PKEY *cle_publique_buffer_to_evp(const char *cle, size_t len) {
+    BIO *mem = BIO_new_mem_buf(cle, len);
+    if (!mem) return NULL;
+    EVP_PKEY *pkey = PEM_read_bio_PUBKEY(mem, NULL, NULL, NULL);
+    BIO_free(mem);
+    return pkey;
+}
 
 /* Génère une paire de clés ED25519 */
 int generate_ed25519_key(char* public_key_name, char* private_key_name){

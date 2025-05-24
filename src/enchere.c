@@ -317,6 +317,17 @@ void *gestion_disp_superviseur(void *arg)
     pthread_exit(NULL);
 }
 
+int get_cle_publique_from_id(uint16_t id_peer, char cle[113]) {
+    peer_list *peer = p.encheres[p.enchere_active].liste_participants;
+    while (peer != NULL) {
+        if (peer->id == id_peer) {
+            memcpy(cle, peer->cle, 113);
+            return 0;
+        }
+        peer = peer->next;
+    }
+    return -1; // non trouvé
+}
 
 // Thread pour recevoir les messages du groupe d'enchères
 void *auction_receiver(void *arg)
@@ -400,21 +411,94 @@ void *auction_receiver(void *arg)
                 }
 
             }
+            // else if (code == 2 )
+            // {
+            //     printf("Message 2 reçu : début du consensus\n");
+            //     struct message_2 parsed_msg = {0};
+
+            //     if (parse_msg_2(buffer, len, &parsed_msg) == 0)
+            //     {
+            //         printf("Message 2 reçu : ID=%d, Message=%s\n NB=%d\n",
+            //                parsed_msg.id, parsed_msg.mess, parsed_msg.nb_validations);
+            //         if(parsed_msg.id != p.encheres[p.enchere_active].my_id){
+            //             if (parsed_msg.nb_validations == p.encheres[p.enchere_active].nb_pairs - 1)
+            //             {
+            //                 printf("Consensus atteint pour le message 2.\n");
+            //                 p.encheres[p.enchere_active].consensus = 0;
+            //                 // Vérification des signatures ici si nécessaire
+            //             }
+            //             if (strcmp(parsed_msg.mess,"superviseur")==0){
+            //                 printf("Message Nouveau SUperviseur\n");
+            //                 p.encheres[p.enchere_active].is_superviseur = 1;
+            //                 pthread_mutex_lock(&p.encheres[p.enchere_active].superviseur_mutex);
+            //                 p.encheres[p.enchere_active].superviseur_actif = 0;
+            //                 pthread_cond_signal(&p.encheres[p.enchere_active].superviseur_cond);  // Réveille le thread en attente
+            //                 pthread_mutex_unlock(&p.encheres[p.enchere_active].superviseur_mutex);
+            //                 return 0;
+            //             }
+            //             if (strcmp(parsed_msg.mess,"quitter")==0){
+                        
+            //                 int n = supp_peer_list(&p.encheres[p.enchere_active].liste_participants,parsed_msg.id);
+            //                 if (n==0){
+            //                     printf("suppresion du peer\n");
+            //                 }
+            //                 printf("avant: %d\n",p.encheres[p.enchere_active].nb_pairs);
+            //                 p.encheres[p.enchere_active].nb_pairs--;
+            //                 printf("apres: %d\n",p.encheres[p.enchere_active].nb_pairs);
+            //             }
+            //         }
+            //     } 
+
+              
+            // }
             else if (code == 2 )
             {
                 printf("Message 2 reçu : début du consensus\n");
                 struct message_2 parsed_msg = {0};
-
+            
                 if (parse_msg_2(buffer, len, &parsed_msg) == 0)
                 {
                     printf("Message 2 reçu : ID=%d, Message=%s\n NB=%d\n",
                            parsed_msg.id, parsed_msg.mess, parsed_msg.nb_validations);
+            
+                    // --- Vérification des signatures des pairs (max 3) ---
+                    size_t offset = 1 + 2 + 1 + parsed_msg.lmess + 1 + parsed_msg.lsig + 2;
+                    for (int i = 0; i < parsed_msg.nb_validations && i < 3; i++) {
+                        uint16_t id_peer;
+                        memcpy(&id_peer, buffer + offset, sizeof(uint16_t));
+                        id_peer = ntohs(id_peer);
+                        offset += sizeof(uint16_t);
+            
+                        uint8_t lsig = buffer[offset++];
+                        unsigned char *sig = buffer + offset;
+                        offset += lsig;
+            
+                        // Récupérer la clé publique du peer (exemple)
+                        char cle[113];
+                        if (get_cle_publique_from_id(id_peer, cle) == 0) { // À adapter à ta logique
+                            EVP_PKEY *pubkey = cle_publique_buffer_to_evp(cle, 113);
+                            if (pubkey) {
+                                if (verify(pubkey, (unsigned char*)parsed_msg.mess, sig, lsig)) {
+                                    printf("Signature valide pour peer %d\n", id_peer);
+                                } else {
+                                    printf("Signature INVALIDE pour peer %d\n", id_peer);
+                                }
+                                EVP_PKEY_free(pubkey);
+                            } else {
+                                printf("Erreur conversion clé publique pour peer %d\n", id_peer);
+                            }
+                        } 
+                        else {
+                            printf("Clé publique introuvable pour peer %d\n", id_peer);
+                        }
+                    }
+                    // --- Fin vérification signatures ---
+            
                     if(parsed_msg.id != p.encheres[p.enchere_active].my_id){
                         if (parsed_msg.nb_validations == p.encheres[p.enchere_active].nb_pairs - 1)
                         {
                             printf("Consensus atteint pour le message 2.\n");
                             p.encheres[p.enchere_active].consensus = 0;
-                            // Vérification des signatures ici si nécessaire
                         }
                         if (strcmp(parsed_msg.mess,"superviseur")==0){
                             printf("Message Nouveau SUperviseur\n");
@@ -426,7 +510,6 @@ void *auction_receiver(void *arg)
                             return 0;
                         }
                         if (strcmp(parsed_msg.mess,"quitter")==0){
-                        
                             int n = supp_peer_list(&p.encheres[p.enchere_active].liste_participants,parsed_msg.id);
                             if (n==0){
                                 printf("suppresion du peer\n");
@@ -436,10 +519,9 @@ void *auction_receiver(void *arg)
                             printf("apres: %d\n",p.encheres[p.enchere_active].nb_pairs);
                         }
                     }
-
-                    
                 }
             }
+            
             else if (code == 8 || code == 9 || code == 14 || code == 15)
             {
                 struct message_8 msg;
@@ -939,51 +1021,102 @@ int handle_peer_disappearance(uint16_t *absent_peer_ids, uint16_t num_absent) {
     uint8_t final_msg[BUF_SIZE];
     int final_msg_len;
 
-    if (nb_validations <= 3) {
-        // Send single CODE=2 message with all validations
-        final_msg_len = msg_2(final_msg, p.id_peer, (char *) msg_buffer, supervisor_signature, 
-                            supervisor_siglen, nb_validations);
+    // if (nb_validations <= 3) {
+    //     // Send single CODE=2 message with all validations
+    //     final_msg_len = msg_2(final_msg, p.id_peer, (char *) msg_buffer, supervisor_signature, 
+    //                         supervisor_siglen, nb_validations);
         
-        // Append all validations
-        size_t offset = final_msg_len;
+    //     // Append all validations
+    //     size_t offset = final_msg_len;
+    //     struct valid_peer *cur = head;
+    //     while (cur != NULL) {
+    //         uint16_t id_net = htons(cur->id);
+    //         memcpy(final_msg + offset, &id_net, sizeof(uint16_t));
+    //         offset += sizeof(uint16_t);
+    //         final_msg[offset++] = cur->lsig;
+    //         memcpy(final_msg + offset, cur->sig, cur->lsig);
+    //         offset += cur->lsig;
+    //         cur = cur->next;
+    //     }
+
+    //     if (send_msg_enchere(final_msg, offset, p.enchere_active, 
+    //                        p.encheres[p.enchere_active].sock) < 0) {
+    //         fprintf(stderr, "Error sending final consensus message\n");
+    //         free(supervisor_signature);
+    //         free_valid_peer_list(head);
+    //         return -1;
+    //     }
+    if (nb_validations <= 3) {
+        // Préparer les tableaux pour les validations
+        uint16_t peer_ids[3];
+        uint8_t sig_lengths[3];
+        unsigned char *signatures[3];
         struct valid_peer *cur = head;
-        while (cur != NULL) {
-            uint16_t id_net = htons(cur->id);
-            memcpy(final_msg + offset, &id_net, sizeof(uint16_t));
-            offset += sizeof(uint16_t);
-            final_msg[offset++] = cur->lsig;
-            memcpy(final_msg + offset, cur->sig, cur->lsig);
-            offset += cur->lsig;
+        int idx = 0;
+        while (cur != NULL && idx < nb_validations) {
+            peer_ids[idx] = cur->id;
+            sig_lengths[idx] = cur->lsig;
+            signatures[idx] = cur->sig;
+            idx++;
             cur = cur->next;
         }
 
-        if (send_msg_enchere(final_msg, offset, p.enchere_active, 
-                           p.encheres[p.enchere_active].sock) < 0) {
+        // Générer le message complet (tout est fait dans msg_2)
+        final_msg_len = msg_2(final_msg, p.id_peer, (char *)msg_buffer, supervisor_signature,
+                            supervisor_siglen, nb_validations, peer_ids, sig_lengths, signatures);
+
+        if (send_msg_enchere(final_msg, final_msg_len, p.enchere_active,
+                            p.encheres[p.enchere_active].sock) < 0) {
             fprintf(stderr, "Error sending final consensus message\n");
             free(supervisor_signature);
             free_valid_peer_list(head);
             return -1;
         }
     } else {
-        // Send initial CODE=2 with first 3 validations
-        final_msg_len = msg_2(final_msg, p.id_peer, (char *) msg_buffer, supervisor_signature, 
-                            supervisor_siglen, 3);
+        // // Send initial CODE=2 with first 3 validations
+        // final_msg_len = msg_2(final_msg, p.id_peer, (char *) msg_buffer, supervisor_signature, 
+        //                     supervisor_siglen, 3);
         
-        // Append first 3 validations
-        size_t offset = final_msg_len;
+        // // Append first 3 validations
+        // size_t offset = final_msg_len;
+        // struct valid_peer *cur = head;
+        // for (int i = 0; i < 3 && cur != NULL; i++) {
+        //     uint16_t id_net = htons(cur->id);
+        //     memcpy(final_msg + offset, &id_net, sizeof(uint16_t));
+        //     offset += sizeof(uint16_t);
+        //     final_msg[offset++] = cur->lsig;
+        //     memcpy(final_msg + offset, cur->sig, cur->lsig);
+        //     offset += cur->lsig;
+        //     cur = cur->next;
+        // }
+
+        // if (send_msg_enchere(final_msg, offset, p.enchere_active, 
+        //                    p.encheres[p.enchere_active].sock) < 0) {
+        //     fprintf(stderr, "Error sending initial consensus message\n");
+        //     free(supervisor_signature);
+        //     free_valid_peer_list(head);
+        //     return -1;
+        // }
+            // Préparer les tableaux pour les 3 premières validations
+        uint16_t peer_ids_start[3];
+        uint8_t sig_lengths_start[3];
+        unsigned char *signatures_start[3];
         struct valid_peer *cur = head;
-        for (int i = 0; i < 3 && cur != NULL; i++) {
-            uint16_t id_net = htons(cur->id);
-            memcpy(final_msg + offset, &id_net, sizeof(uint16_t));
-            offset += sizeof(uint16_t);
-            final_msg[offset++] = cur->lsig;
-            memcpy(final_msg + offset, cur->sig, cur->lsig);
-            offset += cur->lsig;
+        int idx = 0;
+        while (cur != NULL && idx < 3) {
+            peer_ids_start[idx] = cur->id;
+            sig_lengths_start[idx] = cur->lsig;
+            signatures_start[idx] = cur->sig;
+            idx++;
             cur = cur->next;
         }
 
-        if (send_msg_enchere(final_msg, offset, p.enchere_active, 
-                           p.encheres[p.enchere_active].sock) < 0) {
+        // Générer le message CODE=2 avec les 3 premières validations
+        final_msg_len = msg_2(final_msg, p.id_peer, (char *)msg_buffer, supervisor_signature,
+                            supervisor_siglen, 3, peer_ids_start, sig_lengths_start, signatures_start);
+
+        if (send_msg_enchere(final_msg, final_msg_len, p.enchere_active,
+                            p.encheres[p.enchere_active].sock) < 0) {
             fprintf(stderr, "Error sending initial consensus message\n");
             free(supervisor_signature);
             free_valid_peer_list(head);

@@ -27,6 +27,6 @@ int generate_ed25519_key(char* public_key_name, char* private_key_name);
 
 int sign(EVP_PKEY *pkey, unsigned char *msg, unsigned char **sig, size_t *slen);
 int verify(EVP_PKEY *pubkey, unsigned char *msg, unsigned char *sig, size_t slen);
-
+EVP_PKEY *cle_publique_buffer_to_evp(const char *cle, size_t len);
 
 #endif

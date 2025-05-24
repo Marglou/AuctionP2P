@@ -184,14 +184,28 @@ struct message_1 {
     unsigned char sig[ED25519_SIGNATURE_SIZE]; // pointeur vers signature binaire
 };
 
+// struct message_2 {
+//     uint8_t code;       // CODE, ici = 1
+//     uint16_t id;        // ID du supeviseur 
+//     uint8_t lmess;      // longueur du message MESS
+//     char mess[256];         // pointeur vers message 
+//     uint8_t lsig;       // longueur de la signature du superviseur
+//     unsigned char sig[ED25519_SIGNATURE_SIZE]; // pointeur vers signature binaire de superviseur
+//     uint16_t nb_validations; // nombre de validations reçues 
+// };
 struct message_2 {
-    uint8_t code;       // CODE, ici = 1
-    uint16_t id;        // ID du supeviseur 
+    uint8_t code;       // CODE, ici = 2
+    uint16_t id;        // ID du superviseur 
     uint8_t lmess;      // longueur du message MESS
-    char mess[256];         // pointeur vers message 
+    char mess[256];     // message 
     uint8_t lsig;       // longueur de la signature du superviseur
-    unsigned char sig[ED25519_SIGNATURE_SIZE]; // pointeur vers signature binaire de superviseur
+    unsigned char sig[ED25519_SIGNATURE_SIZE]; // signature du superviseur
     uint16_t nb_validations; // nombre de validations reçues 
+
+    // Pour stocker jusqu'à 3 signatures de pairs (cas NB <= 3)
+    uint16_t ids[3];
+    uint8_t siglens[3];
+    unsigned char sigs[3][ED25519_SIGNATURE_SIZE];
 };
 
 // Message code 18 - Remove absent peers
@@ -254,7 +268,10 @@ int parse_msg_1(const unsigned char *buf, size_t buflen, struct message_1 *msg_o
 // int send_msg_1(EVP_PKEY *privkey, uint16_t id, const char *mess,
 //                unsigned char **buf_out, size_t *buf_len);
 
-int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations);
+// int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations);
+// int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg);
+int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations,
+          uint16_t *ids, uint8_t *siglens, unsigned char **sigs);
 int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg);
 
 int msg_20(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *peer_ids, uint8_t *sig_lengths, uint8_t **signatures);

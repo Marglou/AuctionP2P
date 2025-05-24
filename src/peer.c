@@ -788,6 +788,53 @@ int gestion_reception_UDP(int *nb) {
         if (p.encheres[p.enchere_active].nb_msg_1 == p.encheres[p.enchere_active].nb_pairs-1) { // Attention
             printf("Consensus atteint pour le message 1.\n");
             // ENVOIE MSG 2
+            // if (p.encheres[p.enchere_active].nb_msg_1 <= 3) {
+
+            //     uint8_t msg[BUF_SIZE];
+            //     unsigned char *signature = NULL;
+            //     size_t siglen = 0;
+
+            //     // Signature du message
+            //     if (!sign(p.ed_privkey, (unsigned char *) parsed_msg.mess, &signature, &siglen)) {
+            //         fprintf(stderr, "Erreur lors de la signature\n");
+            //         return -1;
+            //     }
+
+            //     int msg2_len = msg_2(msg, p.id_peer, parsed_msg.mess, signature, siglen, p.encheres[p.enchere_active].nb_msg_1);
+            //     if (msg2_len < 0) {
+            //         fprintf(stderr, "Erreur lors de la construction du message 2.\n");
+            //         free(signature);
+            //         return -1;
+            //     }
+            //     printf("\nMESSAGE 2 partie 1 OK\n");
+            //     size_t offset = msg2_len;
+
+            //     // Parcours de la liste valid_peer et concaténation dans le buffer
+            //     struct valid_peer *cur = head;
+            //     while (cur) {
+            //         // Ajout de l'id (2 octets)
+            //         uint16_t id_net = htons(cur->id);
+            //         memcpy(msg + offset, &id_net, sizeof(uint16_t));
+            //         offset += sizeof(uint16_t);
+            //         // Ajout de la longueur de la signature (1 octet)
+            //         msg[offset++] = cur->lsig;
+            //         // Ajout de la signature (lsig octets)
+            //         memcpy(msg + offset, cur->sig, cur->lsig);
+            //         offset += cur->lsig;
+            //         cur = cur->next;
+            //     }
+            //     printf("MESSAGE 2 partie 2 OK\n");
+            //     free_valid_peer_list(head);
+
+            //     if (send_msg_enchere(msg, offset, p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
+            //         perror("sendto dans gestion reception UDP MSG 2");
+            //         p.encheres[p.enchere_active].nb_msg_1 = 0;
+            //         return -1;
+            //     } else {
+            //         printf("Message 2 envoyé à l'enchère active.\n");
+            //         p.encheres[p.enchere_active].nb_msg_1 = 0; // Attention
+            //     }
+            //     p.encheres[p.enchere_active].consensus = 0;
             if (p.encheres[p.enchere_active].nb_msg_1 <= 3) {
 
                 uint8_t msg[BUF_SIZE];
@@ -800,41 +847,43 @@ int gestion_reception_UDP(int *nb) {
                     return -1;
                 }
 
-                int msg2_len = msg_2(msg, p.id_peer, parsed_msg.mess, signature, siglen, p.encheres[p.enchere_active].nb_msg_1);
-                if (msg2_len < 0) {
-                    fprintf(stderr, "Erreur lors de la construction du message 2.\n");
-                    free(signature);
-                    return -1;
-                }
-                printf("\nMESSAGE 2 partie 1 OK\n");
-                size_t offset = msg2_len;
-
-                // Parcours de la liste valid_peer et concaténation dans le buffer
+                // Préparer les tableaux pour les validations
+                uint16_t peer_ids[3];
+                uint8_t sig_lengths[3];
+                unsigned char *signatures[3];
                 struct valid_peer *cur = head;
-                while (cur) {
-                    // Ajout de l'id (2 octets)
-                    uint16_t id_net = htons(cur->id);
-                    memcpy(msg + offset, &id_net, sizeof(uint16_t));
-                    offset += sizeof(uint16_t);
-                    // Ajout de la longueur de la signature (1 octet)
-                    msg[offset++] = cur->lsig;
-                    // Ajout de la signature (lsig octets)
-                    memcpy(msg + offset, cur->sig, cur->lsig);
-                    offset += cur->lsig;
+                int idx = 0;
+                while (cur && idx < p.encheres[p.enchere_active].nb_msg_1) {
+                    peer_ids[idx] = cur->id;
+                    sig_lengths[idx] = cur->lsig;
+                    signatures[idx] = cur->sig;
+                    idx++;
                     cur = cur->next;
                 }
-                printf("MESSAGE 2 partie 2 OK\n");
+
+                // Générer le message complet (tout est fait dans msg_2)
+                int msg2_len = msg_2(msg, p.id_peer, parsed_msg.mess, signature, siglen,
+                                    p.encheres[p.enchere_active].nb_msg_1, peer_ids, sig_lengths, signatures);
+                free(signature);
+
+                if (msg2_len < 0) {
+                    fprintf(stderr, "Erreur lors de la construction du message 2.\n");
+                    free_valid_peer_list(head);
+                    return -1;
+                }
+                printf("MESSAGE 2 OK\n");
                 free_valid_peer_list(head);
 
-                if (send_msg_enchere(msg, offset, p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
+                if (send_msg_enchere(msg, msg2_len, p.enchere_active, p.encheres[p.enchere_active].sock) < 0) {
                     perror("sendto dans gestion reception UDP MSG 2");
                     p.encheres[p.enchere_active].nb_msg_1 = 0;
                     return -1;
                 } else {
                     printf("Message 2 envoyé à l'enchère active.\n");
-                    p.encheres[p.enchere_active].nb_msg_1 = 0; // Attention
+                    p.encheres[p.enchere_active].nb_msg_1 = 0;
                 }
                 p.encheres[p.enchere_active].consensus = 0;
+            
 
                 //si quitte enchere reinit parametre
                 if(strcmp(parsed_msg.mess,"quitter")==0){
@@ -857,9 +906,7 @@ int gestion_reception_UDP(int *nb) {
                         printf("Message 17 envoyé à l'enchère active.\n");
                     }
                 }
-            }
-
-
+            } 
         }
         return 0;
     } 
@@ -1062,7 +1109,6 @@ void* listen_main_sockets(void* arg) {
                         }
                         nb_msg_3++;
                     }
-
                     continue;
                 }
                 else if (strncmp(input, "offre ", 6) == 0) {
