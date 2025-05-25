@@ -13,28 +13,30 @@ typedef struct Vente {
 } Vente;
 
 typedef struct {
-    int sock;                // Socket de l'enchère
-    pthread_t thread_id;     // ID du thread d'écoute
-    struct in6_addr group;   // Adresse IPv6 du groupe d'enchère
-    int id_enchere;          // ID de l'enchère
-    int port_enchere;        // Port de l'enchère
-    int nb_pairs;            // Nombre de pairs dans l'enchère
+    int sock;           // Socket de l'enchère
+    pthread_t thread_id; // ID du thread d'écoute
+    struct in6_addr group; // Adresse IPv6 du groupe d'enchère
+    int id_enchere;     // ID de l'enchère
+    int port_enchere; // Port de l'enchère
+    int nb_pairs; // Nombre de pairs dans l'enchère
 
-    Vente *ventes;           // Liste des ventes associées à l'enchère
+    Vente *ventes; // Liste des ventes associées à l'enchère
     int nb_ventes;
 
     struct peer_list *liste_participants; // Liste des pairs de cette enchère
 
-    int is_superviseur;      // Indique si le pair est superviseur d'une vente
-    int numv_supervise;      // vente supervisé 
+    int is_superviseur; // Indique si le pair est superviseur d'une vente
+    int numv_supervise; // vente supervisé 
     int my_id;
     int consensus;
     int nb_msg_1;
     pthread_t tid_consensus;
-    int superviseur_actif;   // variable de contrôle
+    int superviseur_actif;  // variable de contrôle
     pthread_mutex_t superviseur_mutex;
     pthread_cond_t superviseur_cond;
+
 } EnchereSocket;
+
 
 void afficher_enncheres();
 void creer_enchere();
@@ -55,4 +57,4 @@ Vente* rechercher_vente(EnchereSocket *enchere, int numv);
 void free_ventes(Vente *ventes);
 void update_vente(EnchereSocket *enchere, int numv, uint32_t nouveau_prix);
 
-#endif 
+#endif // ENCHERE_H

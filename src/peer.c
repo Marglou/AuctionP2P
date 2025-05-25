@@ -1,10 +1,4 @@
-/*
- *   Des fonctions utilisées pour gérer un pair dans le système d'enchères distribué.
- *   Ce module permet à chaque pair de :
- *     - Participer à des enchères via multicast UDP.
- *     - Échanger des informations avec les autres pairs et le superviseur.
- *     - Gérer ses clés cryptographiques et sécuriser les échanges.
-*/
+//peer.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +25,7 @@
 #include "../include/utils.h"
 #include "../include/securite.h"
 #include "../include/udp_response.h"
+
 
 //info superviseur 
 int is_superviseur=0;
@@ -82,6 +77,7 @@ void handle_sigint(int sig) {
 
 
 void peer_start(const char *nom) {
+
     p.enchere_active = -1; // Aucune enchère active au départ
     p.global_iface_index = get_active_interface();
     if (p.global_iface_index == -1) {
@@ -520,6 +516,7 @@ void *listen_tcp_thread(void *arg) {
     } 
     return NULL;         
 }
+
   
 int gestion_reception_liaison() {
     char buf[1024];
@@ -712,6 +709,8 @@ int gestion_reception_UDP(int *nb) {
         if (erreur == 0) {
             printf("Message 1 reçu : ID=%u, MESS=%s \n", parsed_msg.id, parsed_msg.mess);
 
+            // Mark response as received for message 1
+            // printf("[UDP Response] Marking response received for message 1\n");
             mark_response_received(&p.udp_responses, 1, parsed_msg.id);
             add_valid_peer(&head, parsed_msg.id, parsed_msg.lsig, parsed_msg.sig);
             p.encheres[p.enchere_active].nb_msg_1 += 1;
@@ -733,7 +732,8 @@ int gestion_reception_UDP(int *nb) {
             }
         }
 
-        if (p.encheres[p.enchere_active].nb_msg_1 == p.encheres[p.enchere_active].nb_pairs-1) { 
+        // printf("nb ms   %d  nB pairs  %d\n", p.encheres[p.enchere_active].nb_msg_1,p.encheres[p.enchere_active].nb_pairs-1);
+        if (p.encheres[p.enchere_active].nb_msg_1 == p.encheres[p.enchere_active].nb_pairs-1) { // Attention
             
             if (p.encheres[p.enchere_active].nb_msg_1 <= 3) {
 
@@ -775,6 +775,7 @@ int gestion_reception_UDP(int *nb) {
                     p.encheres[p.enchere_active].nb_msg_1 = 0;
                     return -1;
                 } else {
+                    // printf("Message 2 envoyé à l'enchère active.\n");
                     p.encheres[p.enchere_active].nb_msg_1 = 0;
                 }
                 p.encheres[p.enchere_active].consensus = 0;
@@ -816,6 +817,9 @@ int gestion_reception_UDP(int *nb) {
     } 
     printf("[Unicast UDP] %s\n", buf);
     fflush(stdout);
+    
+    //Check and retry any pending messages (only code 1)
+    // printf("[UDP Response] Checking for messages that need retrying...\n");
     check_and_retry_messages(&p.udp_responses);
     return 0;
 }
@@ -1040,7 +1044,7 @@ void* listen_main_sockets(void* arg) {
                             printf("Erreur qd on veut partir\n");
                             clean_peer();
                         }
-                        printf("je suis partieeeeee\n");
+                        //printf("je suis partieeeeee\n");
                         p.enchere_active = -1;
                         is_superviseur = 0;
                         continue;

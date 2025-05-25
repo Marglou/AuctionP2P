@@ -1,14 +1,3 @@
-/*
- * Ce fichier contient des fonctions utilitaires pour la gestion des clés cryptographiques
- * et des opérations associées, utilisant la bibliothèque OpenSSL. 
- * 
- * Fonctionnalités principales :
- * 1. Gestion des clés ED25519 
- * 2. Signature et vérification 
- * 3. Gestion des certificats 
- * 4. Gestion des pairs ("peers") 
- * 5. Initialisation et nettoyage OpenSSL 
- */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -25,6 +14,8 @@
 #include <openssl/x509.h>
 #include <openssl/bio.h>
 #include "../include/peer.h"
+
+// code prof CM
 
 static peer_key peers[MAX_PEERS];
 static int peer_count = 0;
@@ -343,6 +334,8 @@ EVP_PKEY *get_peer_pubkey(const char *name)
     return NULL;
 }
 
+
+
 int verify_message(EVP_PKEY *pubkey, const unsigned char *msg, size_t msglen,
                    const unsigned char *sig, size_t siglen)
 {
@@ -392,6 +385,8 @@ int generate_certificate_for_peer(const char *peer_name, char *cert_path, size_t
 
     return 0;
 }
+
+
 
 // Génère paire ED25519 et extrait la clé publique au format PEM (CLE de 113 octets)
 int generate_ed25519_keypair_and_extract_CLE(const char *key_path, unsigned char *CLE) {

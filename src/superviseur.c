@@ -1,11 +1,4 @@
-/* Ce fichier gère le rôle de superviseur dans une enchère, 
- * notamment :
- *  - Initialisation et nettoyage de l'état d'une enchère supervisée
- *  - Validation et relais des offres reçues
- *  - Gestion du timer d'enchère et envoi des messages d'avertissement 
- *    et de finalisation
- *  - Traitement des différents messages liés à l'enchère (offres, ventes, rejets, finalisation)
- */
+// superviseur.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +15,7 @@
 #include "../include/message.h"
 #include "../include/enchere.h"
 #include "../include/utils.h"
+
 
 // Track current auction state
 uint32_t current_price = 0;
@@ -66,7 +60,6 @@ void check_auction_timeout() {
             send_msg_enchere(warning_msg, 11, p.enchere_active, p.encheres[p.enchere_active].sock);
             printf("[Superviseur] Envoi de l'avertissement de finalisation\n");
             warning_sent = 1;
-            printf("chieur a %d\n",warning_sent);
             return;
         }
     }
@@ -163,6 +156,7 @@ void handle_auction_message(uint8_t code, uint16_t id, uint32_t numv, uint32_t p
             }
             
             if (rechercher_vente(&p.encheres[p.enchere_active], numv) != NULL) {
+                // printf("Enchere deja presente\n");
                 break;
             }
 

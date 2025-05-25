@@ -1,3 +1,4 @@
+//peer.h
 #ifndef PEER_H
 #define PEER_H
 
@@ -28,6 +29,7 @@ typedef struct peer_list {
     struct peer_list *next;
 } peer_list;
 
+
 // Structure pour stocker les informations d'un pair
 struct peer_info {
     uint16_t id;
@@ -35,12 +37,14 @@ struct peer_info {
     uint16_t port_tcp;
 };
 
+
 struct Multicast {
     int sock;                                // Socket UDP multicast
     struct sockaddr_in6 addr;                // Adresse multicast (pour sendto)
     struct ipv6_mreq mreq;                   // Pour abonnement (IPV6_JOIN_GROUP)
-    uint16_t port;                           // Port du groupe
+    uint16_t port;                                // Port du groupe
 };
+
 
 struct tcp_listener_state {
     int socket_tcp;
@@ -124,5 +128,5 @@ void incrementer_compte(int montant);
 int decrementer_compte(int montant);
 int lire_compte();
 
-#endif 
+#endif // PEER_H
  

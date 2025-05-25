@@ -1,9 +1,3 @@
-/*
- * Ce module gère le suivi des messages UDP envoyés aux pairs,
- * leur retransmission en cas d'absence d'accusé de réception,
- * et la détection des pairs absents après plusieurs tentatives.
-*/
-
 #include "../include/udp_response.h"
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +36,10 @@ int track_udp_message(struct udp_response_manager* manager, uint8_t code, uint16
     new_msg->send_time = time(NULL);
     new_msg->retry_count = 0;
     new_msg->completed = false;
+
+
+    // printf("[UDP Response] Tracking new message: code=%d, peer_id=%d, length=%zu\n", 
+        //    code, peer_id, message_len);
     return 0;
 }
 
@@ -50,9 +48,12 @@ void mark_response_received(struct udp_response_manager* manager, uint8_t code, 
         struct udp_message_status* msg = &manager->pending_messages[i];
         if (msg->message_code == code && msg->target_peer_id == peer_id) {
             msg->completed = true;
+            // printf("[UDP Response] Response received for message: code=%d, peer_id=%d\n", code, peer_id);
             return;
         }
     }
+    // printf("[UDP Response] Warning: Received response for untracked message: code=%d, peer_id=%d\n", 
+        //    code, peer_id);
 }
 
 void check_and_retry_messages(struct udp_response_manager* manager) {
@@ -94,12 +95,15 @@ void check_and_retry_messages(struct udp_response_manager* manager) {
             } else {
                 msg->last_sent_time = current_time;
                 msg->retry_count++;
+                // printf("[UDP Response] Retried message: code=%d, peer_id=%d, retry=%d\n",
+                //        msg->message_code, msg->target_peer_id, msg->retry_count);
             }
         }
     }
 
     // Handle absent peers if any
     if (num_absent > 0) {
+        // printf("[UDP Response] Detected %d absent peers, initiating removal process\n", num_absent);
         handle_peer_disappearance(absent_peers, num_absent);
         
         // Remove completed messages for absent peers
@@ -113,6 +117,7 @@ void remove_completed_message(struct udp_response_manager* manager, uint8_t code
     for (int i = 0; i < manager->num_pending; i++) {
         struct udp_message_status* msg = &manager->pending_messages[i];
         if (msg->message_code == code && msg->target_peer_id == peer_id) {
+            // printf("[UDP Response] Removing completed message: code=%d, peer_id=%d\n", code, peer_id);
             free(msg->message_data);
             // Move the last message to this position
             if (i < manager->num_pending - 1) {

@@ -1,13 +1,4 @@
-/*
- * Ce fichier implémente deux fonctions de connexion pour un système d'enchères distribué entre pairs :
- * 1. connexion_TCP : établit une connexion TCP standard avec un pair distant via IPv6,
- *    en configurant des délais d'attente pour l'envoi et la réception.
- * 2. connexion_TLS : prépare une connexion sécurisée (TLS) avec un pair. Cette fonction :
- *      - établit une connexion TCP,
- *      - lit une clé publique Ed25519 depuis un fichier PEM,
- *      - construit et envoie un message d'identification (message 5),
- *      - attend une réponse (message 50 ou 51) pour confirmer ou recevoir un nouvel identifiant.
- */
+// connexion.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +24,7 @@
 int connexion_TCP (struct in6_addr ip, uint16_t port){
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
+    //printf("Connexion TCP à %s:%u...\n", ip_str, (port)); 
 
     // Create socket
     int socket_tcp_client = socket(PF_INET6, SOCK_STREAM, 0);
@@ -43,7 +35,7 @@ int connexion_TCP (struct in6_addr ip, uint16_t port){
 
     // Set socket options
     struct timeval tv;
-    tv.tv_sec = 2;  
+    tv.tv_sec = 2;  // 5 seconds timeout
     tv.tv_usec = 0;
     setsockopt(socket_tcp_client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(socket_tcp_client, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
@@ -51,7 +43,7 @@ int connexion_TCP (struct in6_addr ip, uint16_t port){
     // Set up connection address
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
-    dest.sin6_port = htons(port);  
+    dest.sin6_port = htons(port);  // Port is already in network byte order
     dest.sin6_addr = ip;
 
     if (IN6_IS_ADDR_LINKLOCAL(&ip)) {
@@ -59,6 +51,7 @@ int connexion_TCP (struct in6_addr ip, uint16_t port){
     }
     dest.sin6_scope_id = p.global_iface_index;
 
+    // Connect
     if (connect(socket_tcp_client, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
         perror("connect");
         close(socket_tcp_client);
@@ -72,18 +65,21 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
     
 // SSL *connexion_TLS(struct in6_addr ip, uint16_t port) {
     char ip_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));   
+    inet_ntop(AF_INET6, &ip, ip_str, sizeof(ip_str));
+    //printf("Connexion TLS à %s:%u...\n", ip_str, (port));    
 
+    // Create socket
     int socket_tcp_client = socket(AF_INET6, SOCK_STREAM, 0);
     if (socket_tcp_client < 0) {
         perror("socket TCP");
         // SSL_free(ssl);
         return -1;
+        // return NULL;
     }
 
     // Set socket options
     struct timeval tv;
-    tv.tv_sec = 5; 
+    tv.tv_sec = 5;  // 5 seconds timeout
     tv.tv_usec = 0;
     setsockopt(socket_tcp_client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(socket_tcp_client, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
@@ -91,17 +87,19 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
     // Set up connection address
     struct sockaddr_in6 dest = {0};
     dest.sin6_family = AF_INET6;
-    dest.sin6_port = htons(port);  
+    dest.sin6_port = htons(port);  // Port is already in network byte order
     dest.sin6_addr = ip;
     if (IN6_IS_ADDR_LINKLOCAL(&ip)) {
         dest.sin6_scope_id = p.global_iface_index;
     }
     dest.sin6_scope_id = p.global_iface_index;
 
+    // // Connect
     if (connect(socket_tcp_client, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
         perror("connect");
         close(socket_tcp_client);
         return -1;
+        // return NULL;
     }
 
     // // Create SSL structure
@@ -128,6 +126,7 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
     //     return NULL;
     // } 
 
+
     printf("SSL connection established\n");
 
     // Send message 5
@@ -151,8 +150,10 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
         // cleanup_ssl_connection(ssl);
         close(socket_tcp_client);
         return -1;
+        // return NULL;
     }
 
+    // Send message
     if (send(socket_tcp_client, msg, sizeof(msg), 0) != sizeof(msg)) {
     // if (SSL_write(ssl, msg, sizeof(msg)) <= 0) {
         // ERR_print_errors_fp(stderr);
@@ -175,27 +176,31 @@ int connexion_TLS (struct in6_addr ip, uint16_t port) {
         // cleanup_ssl_connection(ssl);
         close(socket_tcp_client);
         return -1;
+        // return NULL;
     }
 
-    if (response[0] == 50) { 
+    if (response[0] == 50) {
+        
         struct message_50 msg_50;
         if (parse_msg_50(response, bytes_read, &msg_50) == 0) {
             p.encheres[p.nb_encheres].my_id = p.id_peer;
         }
-    } 
-    else if (response[0] == 51) {
+    } else if (response[0] == 51) {
+        
         struct message_51 msg_51;
         if (parse_msg_51(response, bytes_read, &msg_51) == 0) {
             printf("nouveau ID : %u\n", msg_51.id);
             p.encheres[p.nb_encheres].my_id = msg_51.id;
         }
-    } 
-    else {
+    } else {
         // cleanup_ssl_connection(ssl);
         close(socket_tcp_client);
         return -1;
+        // return NULL;
     }
 
+    // Keep SSL and socket for future use
     return socket_tcp_client;
+    // return ssl;
 }
 
