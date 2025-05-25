@@ -38,4 +38,4 @@ void mark_response_received(struct udp_response_manager* manager, uint8_t code, 
 void check_and_retry_messages(struct udp_response_manager* manager);
 void remove_completed_message(struct udp_response_manager* manager, uint8_t code, uint16_t peer_id);
 
-#endif // UDP_RESPONSE_H 
+#endif 

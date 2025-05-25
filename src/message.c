@@ -1,4 +1,9 @@
-// message.c
+/*
+ *   Implémentation des fonctions de construction et de parsing des messages échangés
+ *   entre les pairs et le superviseur dans le système d'enchères distribué.
+ *   Les messages incluent les demandes d'inscription, d'envoi de clé publique,
+ *   de participation à une enchère, et de communication des résultats.
+*/
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -178,6 +183,7 @@ int parse_msg_51(uint8_t *msg, size_t msg_len, struct message_51 *msg_struct)
     return 0;
 }
 
+//----------------------------- CODE 8-9-10  --------------------------------------------------
 int msg_8_9_10(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t prix) {
     if (!msg) return -1;
     
@@ -239,7 +245,6 @@ int msg_14_15(uint8_t *msg, uint8_t code, uint16_t id, uint32_t numv, uint32_t p
     return 11; 
 }
 
-// Function to parse auction messages (8, 9, 10)
 int parse_msg_8_9_10(uint8_t *msg, size_t msg_len, struct message_8 *msg_struct) {
     if (!msg || !msg_struct || msg_len < 11) return -1;
     
@@ -481,18 +486,13 @@ int msg_6(uint8_t *msg, uint16_t id_peer, struct in6_addr ip, uint16_t port_tcp,
 {
     size_t offset = 0;
     msg[offset++] = 6; // CODE = 6
-
-    
     msg[offset++] = (id_peer >> 8) & 0xFF;
     msg[offset++] = id_peer & 0xFF;
-
-
     memcpy(msg + offset, &ip, 16);
     offset += 16;
 
     msg[offset++] = (port_tcp >> 8) & 0xFF;
     msg[offset++] = port_tcp & 0xFF;
-
 
     memcpy(msg + offset, cle, 113);
     offset += 113;
@@ -745,11 +745,8 @@ int recevoir_infos_peer(int socket, EnchereSocket *enchere) {
     return 0;
 }
 
-
-// Function to create finalization warning message (code 11)
 int msg_11(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix) {
     if (!msg) return -1;
-    
     msg[0] = 11; 
     
     uint16_t id_net = htons(id);
@@ -780,7 +777,6 @@ int msg_12(uint8_t *msg, uint16_t id, uint32_t numv, uint32_t prix) {
     
     return 11; 
 }
-
 
 int parse_msg_11(uint8_t *msg, size_t msg_len, FinalizationWarningMessage *msg_struct) {
     if (!msg || !msg_struct || msg_len < 11) return -1;

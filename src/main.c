@@ -1,10 +1,15 @@
-//main.c
+/*
+ * Ce fichier contient le point d'entrée principal du programme pair.
+ * Il :
+ *  - demande à l'utilisateur de saisir un nom pour le pair via l'entrée standard,
+ *  - lit ce nom tout en supprimant le caractère de fin de ligne éventuel ('\n'),
+ *  - initialise le pair en appelant la fonction `peer_start` avec le nom fourni.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../include/peer.h"
-
-
 
 int main() {
 

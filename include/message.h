@@ -1,5 +1,3 @@
-//message.h
-
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
@@ -39,10 +37,10 @@ struct message_4 {
 };
 
 struct message_5 {
-    uint8_t code;     // = 5
-    uint16_t id;      // ID du pair
-    struct in6_addr ip;  // Adresse IP (16 octets)
-    uint16_t port;    // Port TCP
+    uint8_t code;            // = 5
+    uint16_t id;             // ID du pair
+    struct in6_addr ip;      // Adresse IP (16 octets)
+    uint16_t port;           // Port TCP
     unsigned char cle[113];  // Clé publique ED25519 (113 octets)
 };
 
@@ -61,10 +59,10 @@ struct message_13 {
 };
 
 struct message_6 {
-    uint8_t code;     // = 6
-    uint16_t id;      // ID du pair P
-    struct in6_addr ip;  // Adresse IP de P (16 octets)
-    uint16_t port;    // Port TCP de P
+    uint8_t code;            // = 6
+    uint16_t id;             // ID du pair P
+    struct in6_addr ip;      // Adresse IP de P (16 octets)
+    uint16_t port;           // Port TCP de P
     unsigned char cle[113];  // Clé publique ED25519 de P (113 octets)
 };
 
@@ -91,24 +89,24 @@ struct message_8 {
     uint32_t prix;    // Port TCP de P
 };
 
-// PARTIE CONSENSUS 
+//------------------------------------ PARTIE CONCENSUS --------------------------------------------------------- 
 struct message_1 {
-    uint8_t code;       // CODE, ici = 1
-    uint16_t id;        // ID du pair 
-    uint8_t lmess;      // longueur du message MESS
-    char mess[256];         // pointeur vers message 
-    uint8_t lsig;       // longueur de la signature
+    uint8_t code;                              // CODE, ici = 1
+    uint16_t id;                               // ID du pair 
+    uint8_t lmess;                             // longueur du message MESS
+    char mess[256];                            // pointeur vers message 
+    uint8_t lsig;                              // longueur de la signature
     unsigned char sig[ED25519_SIGNATURE_SIZE]; // pointeur vers signature binaire
 };
 
 struct message_2 {
-    uint8_t code;       // CODE, ici = 2
-    uint16_t id;        // ID du superviseur 
-    uint8_t lmess;      // longueur du message MESS
-    char mess[256];     // message 
-    uint8_t lsig;       // longueur de la signature du superviseur
-    unsigned char sig[ED25519_SIGNATURE_SIZE]; // signature du superviseur
-    uint16_t nb_validations; // nombre de validations reçues 
+    uint8_t code;                                // CODE, ici = 2
+    uint16_t id;                                 // ID du superviseur 
+    uint8_t lmess;                               // longueur du message MESS
+    char mess[256];                              // message 
+    uint8_t lsig;                                // longueur de la signature du superviseur
+    unsigned char sig[ED25519_SIGNATURE_SIZE];   // signature du superviseur
+    uint16_t nb_validations;                     // nombre de validations reçues 
 
     // Pour stocker jusqu'à 3 signatures de pairs (cas NB <= 3)
     uint16_t ids[3];
@@ -116,7 +114,6 @@ struct message_2 {
     unsigned char sigs[3][ED25519_SIGNATURE_SIZE];
 };
 
-// Message code 18 - Remove absent peers
 struct message_18 {
     uint8_t code;     // = 18
     uint16_t id;      // ID of peer P (supervisor)
@@ -175,7 +172,6 @@ int parse_msg_1(const uint8_t *buf, size_t len, struct message_1 *msg);
 int msg_2(uint8_t *msg, uint16_t id, char *mess, uint8_t *sig, uint8_t siglen, uint16_t nb_validations,
           uint16_t *ids, uint8_t *siglens, unsigned char **sigs);
 int parse_msg_2(const uint8_t *buf, size_t len, struct message_2 *msg);
-
 int msg_20(uint8_t *msg, uint16_t id, uint16_t nb, uint16_t *peer_ids, uint8_t *sig_lengths, uint8_t **signatures);
 
 int get_adresse_perso_from_socket(int sock, struct in6_addr *addr);

@@ -1,3 +1,9 @@
+/*
+ *      Fonctions utilitaires pour la gestion réseau IPv6, sockets TCP/UDP,
+ *        gestion des pairs (peers), envoi de messages multicast, et gestion
+ *        des adresses réseau locales.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -191,12 +197,6 @@ int create_perso_adr_sockets(struct sockaddr_in6 ip, unsigned int scope_id,
                              int *tcp_sock, int *udp_sock,
                              uint16_t port)
 {
-
-    // char ip_str[INET6_ADDRSTRLEN];
-    // inet_ntop(AF_INET6, &ip.sin6_addr, ip_str, sizeof(ip_str));
-    // printf("IPv6: %s\n", ip_str);
-    // printf("Port: %d\n", ntohs(ip.sin6_port));
-    // printf("Scope ID: %u\n", ip.sin6_scope_id);
 
     *tcp_sock = socket(PF_INET6, SOCK_STREAM, 0);
     if (*tcp_sock < 0)
