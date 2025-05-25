@@ -10,14 +10,12 @@ git clone https://moule.informatique.univ-paris-diderot.fr/popovic/auctionp2p.gi
 cd auctionp2p
 ```
 
-2. Construisez le projet :
+2. Exécution :
 ```bash
 make run
 ```
 
 ## Test du système
-
-### Tests de base
 
 1. Ouvrez plusieurs terminaux pour simuler différents homologues.
 
@@ -26,34 +24,84 @@ make run
 make run 
 ```
 
-3. Lorsque vous y êtes invité, saisissez un nom unique pour chaque homologue.
+Une fois le programme lancé, il vous sera demandé :
 
-### Scénarios de test
-
-#### Scénario 1 : Créer une enchère
-1. Dans le terminal du premier pair, saisissez :
-```
-lancer
-```
-Une nouvelle enchère sera créée avec un numéro unique basé sur l'identifiant du pair et son compteur d'enchères.
-
-#### Scénario 2 : Rejoindre une enchère
-1. Dans le terminal d'un autre pair, saisissez :
-```
-join
-```
-Une tentative de rejoindre une enchère existante sera effectuée.
-
-
-### Interface réseau
-
-Le système utilise l'interface réseau spécifiée dans le code. Par défaut, elle est définie sur « enp0s3 ». Si vous utilisez une autre interface, modifiez le nom de l'interface dans `src/main.c`.
-
-
+1. Un pseudo pour le pair
+2. Un solde pour le pair
+3. Un numéro de port (valide et non utilisé) pour l'écoute
+Chaque pair peut être lancé dans un terminal différent pour simuler plusieurs participants.
 
 ## Nettoyage
 
 Pour nettoyer les fichiers de build :
 ```bash
 make clean
+```
+
+## Commandes interactives (clavier)
+    
+Crée une nouvelle enchère et devient superviseur de la vente.
+```bash
+lancer
+```
+Tente de rejoindre une enchère existante via le multicast.
+```bash
+join
+```
+Lance une vente sur une enchère existante si vous êtes superviseur.
+```bash
+vente
+```
+Surenchérit lors d'une vente en cours.  
+```bash
+offre
+```
+Affiche la liste des enchères connues et actives.
+```bash
+encheres
+``` 
+Quitte l'enchère active et/ou termine le programme.
+```bash
+quit
+```
+Affiche l'aide des commandes.
+```bash
+help
+``` 
+## Comportement du protocole
+
+- Lancement d'une enchère : via lancer, un message est multidiffusé et le pair devient superviseur.
+- Rejoindre une enchère : en cas de non-réponse, 3 tentatives sont faites avant de créer une nouvelle enchère automatiquement.
+- Consensus : Chaque message sensible (offre, fin de vente, etc.) est validé par signature ED25519 entre pairs.
+- Vente : Une fois lancée, les pairs peuvent proposer des prix. Le superviseur valide et multidiffuse chaque offre acceptée.
+- Fin de vente : Si aucun nouveau prix n'est reçu dans un délai donné, la vente se termine et un message de victoire est émis.
+- Quitter : Quitte proprement la vente et informe les pairs via multicast.
+
+## Arborescence du projet
+```bash
+AuctionP2P/
+├── include/                # Fichiers d'en-tête (.h)
+│   ├── connexion.h
+│   ├── enchere.h
+│   ├── message.h
+│   ├── peer.h
+│   ├── securite.h
+│   ├── superviseur.h
+│   ├── udp_response.h
+│   └── utils.h
+│
+├── src/                    # Fichiers source (.c)
+│   ├── connexion.c
+│   ├── enchere.c
+│   ├── main.c
+│   ├── message.c
+│   ├── peer.c
+│   ├── securite.c
+│   ├── superviseur.c
+│   ├── udp_response.c
+│   └── utils.c
+│
+├── Makefile                # Script de compilation
+├── README.md               # Documentation utilisateur
+└── authors.md              # Informations sur les auteurs
 ```
